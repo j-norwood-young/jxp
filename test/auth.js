@@ -4,6 +4,7 @@ var chai = require('chai');
 var chaiHttp = require('chai-http');
 
 var init = require("./init");
+var security = require("../dist/libs/security");
 var server = require("../dist/bin/server");
 
 chai.use(chaiHttp);
@@ -42,17 +43,19 @@ describe('Authentication Tests', () => {
                 .end((err, res) => {
                     res.should.have.status(200);
                     res.body.should.have.property('user_id');
-                    res.body.should.have.property('apikey');
+                    res.body.should.not.have.property('apikey');
                     res.body.should.have.property('token');
                     res.body.should.have.property('token_expires');
                     res.body.should.have.property('refresh_token');
                     res.body.should.have.property('refresh_token_expires');
                     res.body.should.have.property('provider');
-                    apikey = res.body.apikey;
                     token = res.body.token;
                     user_id = res.body.user_id;
                     refresh_token = res.body.refresh_token;
-                    done();
+                    security.generateApiKey(user_id).then((record) => {
+                        apikey = record.apikey;
+                        done();
+                    }).catch(done);
                 });
         });
 
@@ -109,13 +112,13 @@ describe('Authentication Tests', () => {
                 });
         });
 
-        it("should authenticate with valid API key in query", (done) => {
+        it("should reject API key in query with migration guidance", (done) => {
             chai.request(server)
                 .get(`/api/user?apikey=${apikey}&limit=1000`)
                 .end((err, res) => {
                     if (err) return done(err);
-                    res.should.have.status(200);
-                    res.body.data.should.be.an('array');
+                    res.should.have.status(401);
+                    res.body.message.should.include("query parameters");
                     done();
                 });
         });

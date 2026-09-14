@@ -1,4 +1,4 @@
-const rand_token = require("rand-token");
+const crypto = require("node:crypto");
 const errors = require("restify-errors");
 const security = require("./security");
 const ObjectID = require('mongodb').ObjectID;
@@ -10,22 +10,31 @@ const init = (models, _config) => {
 	User = getModelFromRegistry(models, "user");
 };
 
-const checkUserDoesNotExist = async () => {
-	try {
+const checkUserDoesNotExist = (req, _res, next) => {
+	Promise.resolve().then(async () => {
+		const configuredToken = req.config?.setup_token || process.env.SETUP_TOKEN;
+		const suppliedToken = req.headers?.["x-setup-token"];
+		const remoteAddress = req.connection?.remoteAddress || req.socket?.remoteAddress || "";
+		const localRequest = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remoteAddress);
+		if (!configuredToken && !localRequest) {
+			throw new errors.ForbiddenError("Initial setup is restricted to localhost; configure SETUP_TOKEN for remote setup");
+		}
+		if (configuredToken && suppliedToken !== configuredToken) {
+			throw new errors.ForbiddenError("Invalid setup token");
+		}
 		const count = await User.countDocuments();
 		if (count) {
 			throw new errors.ConflictError("Cannot setup if user exists");
 		}
-	} catch(err) {
+	}).then(() => next()).catch((err) => {
 		console.error(err);
-		if (err.code) throw err;
-		throw new errors.InternalServerError(err.toString());
-	}
+		next(err.code ? err : new errors.InternalServerError(err.toString()));
+	});
 };
 
 const setup = async (req, res) => {
 	try {
-		const password = (req.body && req.body.password) ? req.body.password : rand_token.generate(12);
+		const password = (req.body && req.body.password) ? req.body.password : crypto.randomBytes(18).toString("base64url");
 		const user = new User({
 			password: security.encPassword(password),
 			email: req.body.email || "admin@example.com",

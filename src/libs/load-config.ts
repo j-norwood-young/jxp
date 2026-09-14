@@ -117,8 +117,12 @@ export function loadJxpConfig(overrides: Partial<JXPConfig> = {}): JXPConfig {
 		server: process.env.API_SERVER || url,
 		apikey: process.env.APIKEY,
 		shared_secret: process.env.SHARED_SECRET,
+		api_key_pepper: process.env.APIKEY_PEPPER,
+		bcrypt_rounds: envInt("BCRYPT_ROUNDS", 12),
 		token_expiry: getTokenExpiry(),
 		refresh_token_expiry: getRefreshTokenExpiry(),
+		setup_token: process.env.SETUP_TOKEN,
+		smtp_tls_verify: envBool("SMTP_TLS_VERIFY", true),
 		model_dir: process.env.MODEL_DIR || "./dist/models",
 		log: process.env.LOG_FILE || "access.log",
 		mongo: {
@@ -146,7 +150,7 @@ export function loadJxpConfig(overrides: Partial<JXPConfig> = {}): JXPConfig {
 		security: {
 			strip_fields: process.env.SECURITY_STRIP_FIELDS
 				? process.env.SECURITY_STRIP_FIELDS.split(",").map((s) => s.trim())
-				: ["password"],
+				: ["password", "temp_hash", "key_hash", "access_token", "refresh_token", "apikey"],
 		},
 		docs: {
 			access: parseDocsAccess(process.env.DOCS_ACCESS),

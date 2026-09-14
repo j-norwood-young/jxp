@@ -12,6 +12,7 @@ var should = chai.should();
 
 var init = require("./init");
 var mongoose = require("mongoose");
+var security = require("../dist/libs/security");
 
 var server = require("../dist/bin/server");
 
@@ -68,7 +69,7 @@ describe('Test', () => {
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property('user_id');
-					res.body.should.have.property('apikey');
+					res.body.should.not.have.property('apikey');
 					res.body.should.have.property('token');
 					res.body.should.have.property('token_expires');
 					res.body.should.have.property('refresh_token');
@@ -77,10 +78,12 @@ describe('Test', () => {
 					const expectedProvider = process.env.API_URL || process.env.API_SERVER
 						|| `http://localhost:${process.env.PORT || "4005"}`;
 					res.body.provider.should.be.eql(expectedProvider);
-					apikey = res.body.apikey;
+					security.generateApiKey(res.body.user_id).then((record) => {
+						apikey = record.apikey;
+						done();
+					}).catch(done);
 					token = res.body.token;
 					user_id = res.body.user_id;
-					done();
 				});
 		});
 	});
@@ -117,10 +120,9 @@ describe('Test', () => {
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property('user_id');
-					res.body.should.have.property('apikey');
+					res.body.should.not.have.property('apikey');
 					res.body.should.have.property('token');
 					res.body.should.have.property('token_expires');
-					res.body.apikey.should.be.eql(apikey);
 					res.body.token.should.not.eql(token);
 					token = res.body.token;
 					refresh_token = res.body.refresh_token;
@@ -181,12 +183,12 @@ describe('Test', () => {
 					done();
 				});
 		})
-		it("should authenticate with an API key in the url", done => {
+		it("should reject an API key in the url with migration guidance", done => {
 			chai.request(server)
 				.get(`/api/user?apikey=${apikey}&limit=1000`)
 				.end((err, res) => {
-					res.should.have.status(200);
-					res.body.data.should.be.an('array');
+					res.should.have.status(401);
+					res.body.message.should.include("query parameters");
 					done();
 				});
 		})
@@ -1157,13 +1159,19 @@ describe('Test', () => {
 
 	describe("Models", () => {
 		it("it should get all the model definitions", (done) => {
-			chai.request(server)
-				.get("/model")
-				// .auth(init.email, init.password)
-				.end((err, res) => {
-					res.should.have.status(200);
-					res.body.should.be.a('array');
-					done();
+			const agent = chai.request.agent(server);
+			agent
+				.post("/docs/session")
+				.send({ email: init.email, password: init.password })
+				.end((loginErr, loginRes) => {
+					if (loginErr) return done(loginErr);
+					loginRes.should.have.status(200);
+					agent.get("/model").end((err, res) => {
+						res.should.have.status(200);
+						res.body.should.be.a('array');
+						agent.close();
+						done();
+					});
 				});
 		});
 	});

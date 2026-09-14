@@ -140,7 +140,10 @@ class Docs {
         data.title = data.title || `${this.package.name} API Documentation`;
         data.name = this.package.name;
         data.version = this.package.version;
-        data.model_list = this.publicModelList();
+        const authenticated = data.docs_authenticated === true;
+        data.model_list = authenticated || getDocsAccess(this.config) !== "protected"
+            ? this.publicModelList()
+            : [];
         data.guide_nav = this.mkdocs.nav || [];
         data.active_section = data.active_section || "";
         data.active_guide = data.active_guide || "";
@@ -236,6 +239,19 @@ class Docs {
             title: `Sign in · ${this.package.name}`,
             ...data,
         });
+    }
+
+    accountKeys(req, res, next) {
+        try {
+            this.renderTemplate(res, "account-keys", {
+                active_section: "account",
+                title: `API keys · ${this.package.name}`,
+                account_models: this.publicModelList(),
+            }, req);
+        } catch (err) {
+            console.error(err);
+            return next(new errors.InternalServerError(err.toString()));
+        }
     }
 
     frontPage(req, res, next) {

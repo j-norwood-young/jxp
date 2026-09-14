@@ -28,8 +28,10 @@ const response_sanitize = require("./response_sanitize");
 const link_index = require("./link_index");
 const { safeErrorMessage } = require("./safe_error");
 const { logRequestError, logAndThrow, sanitizeRequestUrl } = require("./request_log");
+const { securityHeaders } = require("./security_headers");
 const index_diagnostics = require("./index_diagnostics");
 const builtin_models = require("./builtin_models");
+const { warnAboutLegacyApiKeys } = require("./legacy_apikey_check");
 const read_handlers = require("./read_handlers");
 const schemaModule = require("./schema");
 global.JXPSchema = schemaModule.default || schemaModule;
@@ -75,7 +77,9 @@ function advancedQueryAllowed(Model, kind, options?: { isAdmin?: boolean }) {
 }
 
 const middlewareBulkWriteAllowed = (req, res, next) => {
-	if (!advancedQueryAllowed(req.Model, "bulkwrite", { isAdmin: !!res.user?.admin })) {
+	if (!advancedQueryAllowed(req.Model, "bulkwrite", {
+		isAdmin: security.effectiveAdmin(res),
+	})) {
 		const err = new errors.ForbiddenError(
 			`POST /bulkwrite is disabled for model ${req.modelname}`
 		);
@@ -114,7 +118,7 @@ const middlewareModel = (req, res, next) => {
 const middlewarePasswords = (req, res, next) => {
 	if (req.body && req.body.password) {
 		if (req.query.password_override) {
-			if (!res.user?.admin) {
+			if (!security.effectiveAdmin(res)) {
 				const err = new errors.ForbiddenError("password_override requires admin");
 				logRequestError(req, res, err, "password_override");
 				return next(err);
@@ -128,8 +132,7 @@ const middlewarePasswords = (req, res, next) => {
 
 const middlewareCheckAdmin = (req, res, next) => {
 	if (req.modelname !== "user") return next();
-	const isAdmin = res.user?.admin;
-	if (!isAdmin) {
+	if (!security.effectiveAdmin(res)) {
 		if (req.params) req.params.admin = false;
 		if (req.body) {
 			for (const field of USER_PRIVILEGE_FIELDS) {
@@ -140,6 +143,11 @@ const middlewareCheckAdmin = (req, res, next) => {
 		}
 	}
 	next();
+};
+
+const middlewareGroupsSelfOrAdmin = (req, res, next) => {
+	if (security.effectiveAdmin(res) || String(res.user?._id) === String(req.params.user_id)) return next();
+	return next(new errors.ForbiddenError("Only the user or an admin can view group membership"));
 };
 
 // Outputs whatever is in res.result as JSON
@@ -233,7 +241,7 @@ const actionPost = async (req, res) => {
 		res.json({
 			status: "ok",
 			message: req.modelname + " created",
-			data: item
+			data: response_sanitize.sanitizeDocument(item, getStripFields(req))
 		});
 		if (debug) console.timeEnd(opname);
 	} catch (err) {
@@ -275,7 +283,7 @@ const actionPut = async (req, res) => {
 		res.json({
 			status: "ok",
 			message: req.modelname + " updated",
-			data: data
+			data: response_sanitize.sanitizeDocument(data, getStripFields(req))
 		});
 		if (debug) console.timeEnd(opname);
 	} catch (err) {
@@ -311,7 +319,7 @@ const actionUpdate = async (req, res) => {
 		res.json({
 			status: "ok",
 			message: req.modelname + " updated",
-			data
+			data: response_sanitize.sanitizeDocument(data, getStripFields(req))
 		});
 		if (debug) console.timeEnd(opname);
 	} catch (err) {
@@ -571,10 +579,18 @@ const actionAggregate = async (req, res) => {
 		);
 	}
 	query = query_manipulation.fix_query(query);
+	if (query.length > 50) {
+		throw new errors.BadRequestError("Aggregation pipeline is limited to 50 stages");
+	}
+	for (const stage of query) {
+		if (stage && typeof stage === "object" && stage.$match) {
+			query_sanitize.sanitizeFilter(stage.$match, getSecurityOpts(req));
+		}
+	}
 	try {
 		aggregate_guard.validatePipeline(query, {
 			aggregate_stages_allow: getSecurityOpts(req).aggregate_stages_allow,
-			isAdmin: res.user?.admin,
+			isAdmin: security.effectiveAdmin(res),
 		});
 	} catch (err) {
 		logRequestError(req, res, err, "aggregate_guard");
@@ -592,6 +608,7 @@ const actionAggregate = async (req, res) => {
 		} else {
 			result.data = await req.Model.aggregate(query);
 		}
+		query_limits.enforceResponseSize(result, req, res);
 		response_sanitize.sanitizeResponse(result, getStripFields(req));
 		res.result = result;
 		if (debug) console.timeEnd(opname);
@@ -621,9 +638,23 @@ const actionBulkWrite = async (req, res) => {
 	const opname = `bulkwrite ${req.modelname} ${ops++}`;
 	console.time(opname);
 	const query = req.body;
+	for (const entry of query) {
+		const opName = Object.keys(entry)[0];
+		const payload = entry[opName];
+		const strip = (value) => {
+			if (!value || typeof value !== "object") return;
+			for (const field of ["_owner_id", "_updated_by_id", "_deleted"]) delete value[field];
+		};
+		if (opName === "insertOne") strip(payload.document);
+		if (opName === "updateOne" || opName === "updateMany" || opName === "replaceOne") {
+			strip(payload.update);
+			strip(payload.update?.$set);
+			strip(payload.update?.$setOnInsert);
+		}
+	}
 	bulkwrite_guard.validateBulkOps(query, {
 		bulk_operations_allow: getSecurityOpts(req).bulk_operations_allow,
-		isAdmin: res.user?.admin,
+		isAdmin: security.effectiveAdmin(res),
 	});
 	try {
 		let result: Record<string, unknown> = {};
@@ -711,6 +742,9 @@ const _deSerialize = (data) => {
 
 const _populateItem = (item, data) => {
 	_deSerialize(data);
+	for (const field of ["_owner_id", "_updated_by_id"]) {
+		delete data[field];
+	}
 	for (let prop in item) {
 		if (typeof data[prop] != "undefined") {
 			item[prop] = data[prop];
@@ -819,7 +853,7 @@ const JXP = function (options: JXPConfig) {
 			max_response_size: "10mb",
 		},
 		security: {
-			strip_fields: ["password"],
+			strip_fields: ["password", "temp_hash", "key_hash", "access_token", "refresh_token", "apikey"],
 		},
 		cors: {
 			origins: ["*"],
@@ -863,10 +897,13 @@ const JXP = function (options: JXPConfig) {
 	ws.init({ models });
 	cache.init(config);
 	const docs = new Docs({ config, models });
-	docsAuth.init(config);
+	docsAuth.init(config, models);
 	docsAuth.logDocsAccessMode(config);
 	const loginThrottle = loginRateLimit.createLoginThrottle(config);
 	loginRateLimit.logLoginRateLimit(config);
+	void warnAboutLegacyApiKeys(models, config).catch((err) => {
+		if (!config.quiet_startup) console.warn("Could not check legacy API keys:", err);
+	});
 
 	// Set up our API server
 
@@ -888,7 +925,7 @@ const JXP = function (options: JXPConfig) {
 	const cors = corsMiddleware({
 		preflightMaxAge: 5, //Optional
 		origins: corsOrigins,
-		allowHeaders: ['X-Requested-With', 'Authorization'],
+		allowHeaders: ['X-Requested-With', 'Authorization', 'X-API-Key', 'Content-Type'],
 		exposeHeaders: ['Authorization']
 	});
 
@@ -904,6 +941,7 @@ const JXP = function (options: JXPConfig) {
 		req.config = config;
 		next();
 	});
+	server.use(securityHeaders);
 
 	// Set req.username = "anonymous" if not logged in
 	server.use((req, res, next) => {
@@ -1070,7 +1108,7 @@ const JXP = function (options: JXPConfig) {
 	);
 
 	/* Login and authentication */
-	server.post("/login/recover", login.recover);
+	server.post("/login/recover", ...(loginThrottle ? [loginThrottle] : []), login.recover);
 	server.post("/login/getjwt", security.login, login.getJWT);
 	server.get("/login/logout", security.login, login.logout);
 	server.get("/logout", security.login, login.logout);
@@ -1084,8 +1122,8 @@ const JXP = function (options: JXPConfig) {
 		outputJSON,
 	];
 	server.post("/login", ...loginChain);
-	server.post("/refresh", security.refresh);
-	server.post("/login/refresh", security.refresh);
+	server.post("/refresh", ...(loginThrottle ? [loginThrottle] : []), security.refresh);
+	server.post("/login/refresh", ...(loginThrottle ? [loginThrottle] : []), security.refresh);
 
 	/* Groups */
 	server.put(
@@ -1102,12 +1140,12 @@ const JXP = function (options: JXPConfig) {
 		_fixArrays,
 		groups.actionPost,
 	);
-	server.get("/groups/:user_id", security.login, groups.actionGet);
+	server.get("/groups/:user_id", security.login, middlewareGroupsSelfOrAdmin, groups.actionGet);
 	server.del("/groups/:user_id", security.login, security.admin_only, groups.actionDelete);
 
 	/* Meta */
-	server.get("/model/:modelname", middlewareModel, docs.metaModel.bind(docs));
-	server.get("/model", docs.metaModels.bind(docs));
+	server.get("/model/:modelname", docsAuth.docsAccessMiddleware, middlewareModel, docs.metaModel.bind(docs));
+	server.get("/model", docsAuth.docsAccessMiddleware, docs.metaModels.bind(docs));
 	// server.get("/docs/_design", docs.dbDiagram.bind(docs));
 	server.get("/docs/login", async (req, res) => {
 		await docsAuth.loginPage(req, res, docs.renderLogin.bind(docs));
@@ -1126,6 +1164,11 @@ const JXP = function (options: JXPConfig) {
 	server.get("/docs/diagnostics", docsAuth.docsAccessMiddleware, docs.diagnostics.bind(docs));
 	server.get("/docs/md/:md_doc", docs.md.bind(docs));
 	server.get("/docs/model/:modelname", docsAuth.docsAccessMiddleware, docs.model.bind(docs));
+	server.get("/docs/account", docsAuth.docsAccessMiddleware, (req, res, next) => res.redirect(302, "/docs/account/keys", next));
+	server.get("/docs/account/keys", docsAuth.docsAccessMiddleware, docs.accountKeys.bind(docs));
+	server.get("/docs/account/keys/data", docsAuth.docsAccessMiddleware, docsAuth.listAccountKeys);
+	server.post("/docs/account/keys", docsAuth.docsAccessMiddleware, docsAuth.createAccountKey);
+	server.post("/docs/account/keys/:id/revoke", docsAuth.docsAccessMiddleware, docsAuth.revokeAccountKey);
 	server.get("/", docs.frontPage.bind(docs));
 
 	/* Setup */

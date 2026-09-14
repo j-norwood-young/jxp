@@ -8,11 +8,11 @@ alwaysApply: false
 
 | Mode | Public | Login required |
 |------|--------|----------------|
-| `protected` (default) | `/`, `/docs/md/*`, assets | `/docs/api`, `/docs/model/*` |
+| `protected` (default) | `/`, `/docs/md/*`, assets | `/docs/api`, `/docs/model/*`, `/model*`, `/docs/account/*` |
 | `disabled` | same | model explorer → 404 |
 | `public` | all | none |
 
-Sign-in page (`/docs/login`) calls `POST /login`, then `POST /docs/session` with the returned `apikey` (HttpOnly cookie). Both routes use login rate limiting (`login_rate_limit.ts`); handle HTTP 429 in `docs-login.js`.
+Sign-in page (`/docs/login`) calls `POST /docs/session` with email/password and receives an HttpOnly session cookie plus a short-lived console key. The console key is kept in sessionStorage and revoked on logout. The session endpoint uses login rate limiting (`login_rate_limit.ts`); handle HTTP 429 in `docs-login.js`.
 
 ## Restify
 

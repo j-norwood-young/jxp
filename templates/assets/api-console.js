@@ -119,13 +119,17 @@
 	async function loadSessionApiKey() {
 		const access = document.documentElement.dataset.docsAccess;
 		if (access !== "protected") return;
+		const sessionKey = sessionStorage.getItem("jxp_docs_console_key");
+		if (sessionKey) {
+			const input = document.getElementById("docs-api-key");
+			if (input) input.value = sessionKey;
+			return;
+		}
 		try {
 			const res = await fetch("/docs/session", { credentials: "same-origin" });
 			if (!res.ok) return;
 			const data = await res.json();
-			if (!data.apikey) return;
-			const input = document.getElementById("docs-api-key");
-			if (input) input.value = data.apikey;
+			if (!data.authenticated) return;
 		} catch {
 			/* ignore */
 		}
@@ -147,5 +151,20 @@
 		}
 
 		document.querySelectorAll(".api-try-panel").forEach(initPanel);
+		const logout = document.querySelector('form[action="/docs/logout"]');
+		if (logout) {
+			logout.addEventListener("submit", async function (event) {
+				event.preventDefault();
+				sessionStorage.removeItem("jxp_docs_console_key");
+				const csrfCookie = document.cookie.split("; ").find((value) => value.startsWith("jxp_docs_csrf="));
+				const token = csrfCookie ? decodeURIComponent(csrfCookie.split("=").slice(1).join("=")) : "";
+				await fetch("/docs/logout", {
+					method: "POST",
+					headers: { "X-CSRF-Token": token },
+					credentials: "same-origin"
+				});
+				window.location.href = "/";
+			});
+		}
 	});
 })();

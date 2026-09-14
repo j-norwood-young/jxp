@@ -16,7 +16,10 @@ const init = (config) => {
 
 const generateKey = (req, res) => {
     if (res.jxp_cache_key) return res.jxp_cache_key;
-    let key = `${req.modelname}/`;
+    const userId = res.user?._id ? String(res.user._id) : "anonymous";
+    const groups = Array.isArray(res.groups) ? [...res.groups].sort().join(",") : "";
+    const apiKey = res.apikey?.key_hash ? String(res.apikey.key_hash) : "none";
+    let key = `${req.modelname}/${userId}/${groups}/${apiKey}/`;
     if (req.params.item_id) {
         key += `${req.params.item_id}`
     }
@@ -31,7 +34,7 @@ const set = async (req, res) => {
     if (!cache) return;
     const key = generateKey(req, res)
     cache.set(key, res.result)
-    if (!req.config.cache.debug) {
+    if (req.config.cache.debug) {
         console.log('cache set', key)
     }
 }
@@ -39,10 +42,9 @@ const set = async (req, res) => {
 const get = (req, res, next) => {
     if (!cache) return next();
     const key = generateKey(req, res)
-    res.header('jxp-cache-key', key);
     const cached = cache.get(key)
     if (cached) {
-        if (!req.config.cache.debug) {
+        if (req.config.cache.debug) {
             console.log('cache hit', key)
         }
         res.header('jxp-cache', 'hit')
@@ -50,7 +52,7 @@ const get = (req, res, next) => {
         res.send(res.result);
         return;
     }
-    if (!req.config.cache.debug) {
+    if (req.config.cache.debug) {
         console.log('cache miss', key)
     }
     res.header('jxp-cache', 'miss')
@@ -62,7 +64,7 @@ const clear = async (req) => {
     const keys = cache.keys()
     keys.forEach(key => {
         if (key.startsWith(`${req.modelname}/`)) {
-            if (!req.config.cache.debug) {
+            if (req.config.cache.debug) {
                 console.log('cache del', key)
             }
             cache.del(key)

@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require('bcryptjs');
+const crypto = require("node:crypto");
 const security = require("../libs/security");
 const nodemailer = require('nodemailer');
 const errors = require("restify-errors");
@@ -20,7 +21,7 @@ const recover = async (req, res) => {
 				user: req.config.smtp_username,
 				pass: req.config.smtp_password,
 			},
-			tls: { rejectUnauthorized: false },
+			tls: { rejectUnauthorized: req.config.smtp_tls_verify !== false },
 		});
 		const email = req.body.email;
 		if (!email) {
@@ -29,10 +30,13 @@ const recover = async (req, res) => {
 		}
 		const user = await User.findOne({ email });
 		if (!user) {
-			throw new errors.NotFoundError(`User with email ${email} Not Found`);
+			res.send({ status: "ok", message: "If that account exists, recovery instructions will be sent" });
+			return;
 		}
-		const result = await security.generateApiKey(user._id);
-		const token = jwt.sign({ apikey: result.apikey, email: user.email, id: user._id }, req.config.shared_secret, { expiresIn: "2d" });
+		const rawToken = crypto.randomBytes(32).toString("base64url");
+		user.temp_hash = security.encPassword(rawToken);
+		await user.save();
+		const token = jwt.sign({ purpose: "password-recovery", jti: rawToken, id: user._id }, req.config.shared_secret, { expiresIn: "2d" });
 		var text = `Someone (hopefully you) requested a password reset. Please click on the following url to recover your password. If you did not request a password reset, you can ignore this message. \n${req.config.password_recovery_url}/${token}`;
 		var html = text;
 		var mail_format = req.params.mail_format || req.body.mail_format;
@@ -73,7 +77,8 @@ const oauth = (req, res, next) => { // Log in through an OAuth2 provider, define
 	if (!provider_config) {
 		throw new errors.InternalServerError(`oAuth ${req.params.provider} config not defined`);
 	}
-	const state = Math.random().toString(36).substring(7);
+	const state = crypto.randomBytes(24).toString("base64url");
+	res.header("Set-Cookie", `jxp_oauth_state=${encodeURIComponent(state)}; Path=/; HttpOnly; SameSite=Lax`);
 	const uri = `${provider_config.auth_uri}?client_id=${provider_config.app_id}&redirect_uri=${req.config.url}/login/oauth/callback/${req.params.provider}&scope=${provider_config.scope}&state=${state}&response_type=code`;
 	res.redirect(uri, next);
 }
@@ -85,6 +90,13 @@ const oauth_callback = async (req, res) => {
 	try {
 		if (req.query.error) {
 			throw (req.query.error);
+		}
+		const stateCookie = String(req.headers.cookie || "").split(";")
+			.map((part) => part.trim())
+			.find((part) => part.startsWith("jxp_oauth_state="))
+			?.slice("jxp_oauth_state=".length);
+		if (!stateCookie || stateCookie !== req.query.state) {
+			throw ("oauth_state_invalid");
 		}
 		if (!code) {
 			throw ("missing_code");
@@ -132,8 +144,7 @@ const oauth_callback = async (req, res) => {
 		}
 		user[provider] = data;
 		await user.save();
-		const apikey = await security.generateApiKey(user._id)
-		var jwt_token = jwt.sign({ apikey: apikey.apikey, user: user }, req.config.shared_secret, {
+		var jwt_token = jwt.sign({ purpose: "oauth-login", user_id: user._id }, req.config.shared_secret, {
 			expiresIn: "1m"
 		});
 		res.redirect(`${req.config.oauth.success_uri}?token=${jwt_token}`);
@@ -173,11 +184,9 @@ const login = async (req, res) => {
 		}
 		const token = await security.refreshToken(user._id);
 		const refreshtoken = await security.ensureRefreshToken(user._id);
-		const apikey = await security.generateApiKey(user._id)
 		res.result = ({
 			user_id: user._id,
 			token: token.access_token,
-			apikey: apikey.apikey,
 			token_expires: security.tokenExpires(token),
 			refresh_token: refreshtoken.refresh_token,
 			refresh_token_expires: security.tokenExpires(refreshtoken),
@@ -192,7 +201,7 @@ const login = async (req, res) => {
 
 const getJWT = async (req, res) => {
 	var user = null;
-	if (!res.user.admin) {
+	if (!security.effectiveAdmin(res)) {
 		throw new errors.UnauthorizedError("Unauthorized");
 	}
 	var email = req.params.email || req.body.email;
@@ -206,11 +215,12 @@ const getJWT = async (req, res) => {
 		}
 		user = result;
 		try {
-			const apikey = await security.generateApiKey(user._id)
-			var token = jwt.sign({ apikey: apikey.apikey, email: user.email, id: user._id }, req.config.shared_secret, {
-				expiresIn: "2d"
+			const accessToken = await security.generateToken(user._id);
+			res.send({
+				email: user.email,
+				token: accessToken.access_token,
+				token_expires: security.tokenExpires(accessToken),
 			});
-			res.send({ email: user.email, token: token });
 		} catch (err) {
 			throw new errors.UnauthorizedError("Unauthorized");
 		}

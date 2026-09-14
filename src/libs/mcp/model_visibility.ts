@@ -15,6 +15,7 @@ export interface McpAuthUser {
 export interface McpAuthContext {
 	user: McpAuthUser | null;
 	groups: string[];
+	apikey?: { scopes?: Map<string, string> | Record<string, string>; allow_admin?: boolean };
 }
 
 export function isDefaultHiddenModel(slug: string, model: Model<unknown>, config: McpConfig): boolean {
@@ -33,10 +34,19 @@ export function isBlacklisted(slug: string, config: McpConfig): boolean {
 export async function canReadModel(
 	auth: McpAuthContext,
 	model: Model<unknown>,
+	slug?: string,
 	itemId?: string
 ): Promise<boolean> {
 	try {
-		await security.check_perms(auth.user, auth.groups, model, "r", itemId);
+		if (auth.apikey && slug) {
+			try {
+				security.enforceKeyScope(auth.apikey, slug, "r");
+			} catch {
+				return false;
+			}
+		}
+		const user = auth.apikey?.allow_admin === false ? { ...auth.user, admin: false } : auth.user;
+		await security.check_perms(user, auth.groups, model, "r", itemId);
 		return true;
 	} catch {
 		return false;
@@ -54,7 +64,7 @@ export async function isModelVisibleMcp(
 	config: McpConfig,
 	itemId?: string
 ): Promise<boolean> {
-	if (!(await canReadModel(auth, model, itemId))) return false;
+	if (!(await canReadModel(auth, model, slug, itemId))) return false;
 	if (isBlacklisted(slug, config)) return false;
 	if (isDefaultHiddenModel(slug, model, config) && !isVisibilityOverridden(slug, config)) {
 		return false;
@@ -70,7 +80,7 @@ export async function assertModelVisibleMcp(
 	itemId?: string
 ): Promise<void> {
 	const errors = require("restify-errors");
-	if (!(await canReadModel(auth, model, itemId))) {
+	if (!(await canReadModel(auth, model, slug, itemId))) {
 		throw new errors.ForbiddenError(`No read access to model "${slug}"`);
 	}
 	if (isBlacklisted(slug, config)) {

@@ -1,0 +1,67 @@
+extends layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-4
+    div
+      h1 API keys
+      p.text-muted Create separate credentials for services, scripts, and integrations.
+    a.btn.btn-outline-secondary(href="/") Home
+
+  .alert.alert-warning.d-none#key-created(role="alert")
+    strong Copy this key now.
+    |  It will not be shown again.
+    .input-group.mt-2
+      input.form-control#new-key(type="text" readonly)
+      button.btn.btn-outline-secondary#copy-key(type="button") Copy
+
+  .card.mb-4
+    .card-body
+      h2.h5 Create a key
+      form#key-create-form
+        input(type="hidden" name="csrf")
+        .row.g-3
+          .col-md-5
+            label.form-label(for="key-name") Name
+            input.form-control#key-name(name="name" required placeholder="CI deploy key")
+          .col-md-4
+            label.form-label(for="key-expires") Expires
+            input.form-control#key-expires(name="expires_at" type="datetime-local")
+          .col-md-3.d-flex.align-items-end
+            .form-check
+              input.form-check-input#key-admin(name="allow_admin" type="checkbox" checked)
+              label.form-check-label(for="key-admin") Allow admin permissions
+        .form-check.mt-3
+          input.form-check-input#limited-key(name="limited" type="checkbox")
+          label.form-check-label(for="limited-key") Limit this key to selected models
+        p.text-muted.small.mt-2 No selection means full access inherited from your user. A limited key denies every model not listed.
+        .table-responsive.d-none#scope-table
+          table.table.table-sm
+            thead
+              tr
+                th Model
+                th C
+                th R
+                th U
+                th D
+            tbody
+              each model in account_models
+                tr(data-model=model)
+                  td= model
+                  each method in ['c', 'r', 'u', 'd']
+                    td
+                      input.form-check-input.scope-perm(type="checkbox" data-method=method aria-label=`${model} ${method}`)
+        button.btn.btn-primary(type="submit") Create key
+        span.text-danger.ms-3#key-error
+
+  h2.h5 Existing keys
+  .table-responsive
+    table.table
+      thead
+        tr
+          th Name
+          th Scope
+          th Expiry
+          th Last used
+          th
+      tbody#keys-list
+  script(src="/docs/assets/account-keys.js" defer)

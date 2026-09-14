@@ -1,6 +1,5 @@
 import errors from "restify-errors";
 import type { JXPRequest } from "../../types/jxp-config";
-import { verifyDocsSession } from "../docs-auth";
 import { authenticateMcpRequest } from "./auth";
 import type { McpAuthContext } from "./model_visibility";
 import { getMcpConfig } from "./config";
@@ -20,15 +19,8 @@ export async function authenticateDocsMcpRequest(req: JXPRequest): Promise<McpAu
 		return authenticateMcpRequest(req as unknown as import("node:http").IncomingMessage, mcpConfig.requireApiKey);
 	}
 
-	const session = (req as JXPRequest & { docsSession?: { apikey: string } }).docsSession
-		?? verifyDocsSession(req);
-	if (session?.apikey) {
-		req.headers["x-api-key"] = session.apikey;
-		return authenticateMcpRequest(req as unknown as import("node:http").IncomingMessage, mcpConfig.requireApiKey);
-	}
-
 	if (mcpConfig.requireApiKey) {
-		throw new errors.UnauthorizedError("API key required (top bar or sign in)");
+		throw new errors.UnauthorizedError("API key required in the top bar");
 	}
 	return authenticateMcpRequest(req as unknown as import("node:http").IncomingMessage, false);
 }

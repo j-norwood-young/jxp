@@ -26,22 +26,16 @@ function mockReq(overrides = {}) {
 	};
 }
 
-/** Login via POST /login, then POST /docs/session — same flow as the docs login page. */
+/** Establish a docs session using the docs login flow. */
 function docsLogin(agent, done) {
 	agent
-		.post("/login")
+		.post("/docs/session")
 		.send({ email: init.email, password: init.password })
 		.end((err, loginRes) => {
 			loginRes.should.have.status(200);
-			loginRes.body.should.have.property("apikey");
-			agent
-				.post("/docs/session")
-				.send({ apikey: loginRes.body.apikey })
-				.end((err2, sessRes) => {
-					sessRes.should.have.status(200);
-					sessRes.body.should.have.property("ok", true);
-					done();
-				});
+			loginRes.body.should.have.property("console_key");
+			loginRes.body.should.have.property("csrf_token");
+			done();
 		});
 }
 
@@ -58,11 +52,14 @@ describe("docs_auth", () => {
 	});
 
 	describe("isProtectedDocsPath", () => {
-		it("only gates model explorer routes", () => {
+		it("gates model metadata and account routes", () => {
 			expect(docsAuth.isProtectedDocsPath("/docs/api")).to.be.true;
 			expect(docsAuth.isProtectedDocsPath("/docs/mcp")).to.be.true;
 			expect(docsAuth.isProtectedDocsPath("/docs/mcp/call")).to.be.true;
 			expect(docsAuth.isProtectedDocsPath("/docs/model/user")).to.be.true;
+			expect(docsAuth.isProtectedDocsPath("/model")).to.be.true;
+			expect(docsAuth.isProtectedDocsPath("/model/user")).to.be.true;
+			expect(docsAuth.isProtectedDocsPath("/docs/account/keys")).to.be.true;
 			expect(docsAuth.isProtectedDocsPath("/")).to.be.false;
 			expect(docsAuth.isProtectedDocsPath("/docs/md/api.md")).to.be.false;
 			expect(docsAuth.isProtectedDocsPath("/docs/login")).to.be.false;
@@ -111,7 +108,7 @@ describe("docs_auth", () => {
 		it("returns payload for a valid session cookie", () => {
 			const secret = process.env.SHARED_SECRET || "change-me";
 			const token = jwt.sign(
-				{ user_id: "abc", email: init.email, apikey: "testkey123" },
+				{ user_id: "abc", email: init.email, console_key_id: "key-123" },
 				secret,
 				{ expiresIn: 3600 },
 			);
@@ -119,7 +116,7 @@ describe("docs_auth", () => {
 				headers: { cookie: `${DOCS_SESSION_COOKIE}=${encodeURIComponent(token)}` },
 			});
 			const session = docsAuth.verifyDocsSession(req);
-			session.should.have.property("apikey", "testkey123");
+			session.should.have.property("console_key_id", "key-123");
 		});
 	});
 
@@ -154,14 +151,14 @@ describe("docs_auth", () => {
 				});
 		});
 
-		it("logs in via /login + /docs/session and reaches /docs/api", (done) => {
+		it("logs in via /docs/session and reaches /docs/api", (done) => {
 			const agent = chai.request.agent(server);
 			docsLogin(agent, () => {
 				agent
 					.get("/docs/session")
 					.end((err, sess) => {
 						sess.should.have.status(200);
-						sess.body.should.have.property("apikey").that.is.a("string");
+						sess.body.should.have.property("authenticated", true);
 						agent
 							.get("/docs/api")
 							.end((err2, page) => {
@@ -182,10 +179,10 @@ describe("docs_auth", () => {
 				});
 		});
 
-		it("rejects establishSession with invalid apikey", (done) => {
+		it("rejects establishSession with invalid credentials", (done) => {
 			chai.request(server)
 				.post("/docs/session")
-				.send({ apikey: "not-a-real-key" })
+				.send({ email: init.email, password: "not-a-real-password" })
 				.end((err, res) => {
 					res.should.have.status(401);
 					done();

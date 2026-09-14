@@ -113,11 +113,15 @@ export interface JXPConfig {
 	throttle?: Record<string, unknown>;
 	token_expiry?: number;
 	refresh_token_expiry?: number;
+	bcrypt_rounds?: number;
+	api_key_pepper?: string;
 	password_recovery_url?: string;
+	setup_token?: string;
 	smtp_server?: string;
 	smtp_username?: string;
 	smtp_password?: string;
 	smtp_from?: string;
+	smtp_tls_verify?: boolean;
 	cache?: JXPCacheConfig;
 	index_diagnostics?: JXPIndexDiagnosticsConfig;
 	docs?: JXPDocsConfig;
@@ -160,6 +164,8 @@ export interface JXPRequest {
 	query: Record<string, unknown>;
 	body?: Record<string, unknown>;
 	headers: Record<string, string | string[] | undefined>;
+	connection?: { remoteAddress?: string; encrypted?: boolean };
+	socket?: { remoteAddress?: string };
 	method: string;
 	route?: { name?: string };
 	modelname?: string;

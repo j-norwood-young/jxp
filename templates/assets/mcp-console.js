@@ -259,13 +259,17 @@
 	async function loadSessionApiKey() {
 		const access = document.documentElement.dataset.docsAccess;
 		if (access !== "protected") return;
+			const sessionKey = sessionStorage.getItem("jxp_docs_console_key");
+			if (sessionKey) {
+				const input = document.getElementById("docs-api-key");
+				if (input) input.value = sessionKey;
+				return;
+			}
 		try {
 			const res = await fetch("/docs/session", { credentials: "same-origin" });
 			if (!res.ok) return;
 			const data = await res.json();
-			if (!data.apikey) return;
-			const input = document.getElementById("docs-api-key");
-			if (input) input.value = data.apikey;
+			if (!data.authenticated) return;
 			updateMcpConfigSnippets();
 		} catch {
 			/* ignore */

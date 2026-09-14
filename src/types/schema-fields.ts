@@ -18,8 +18,8 @@ export interface JXPAdvancedQueries {
 export interface JXPSchemaOptions {
 	perms?: Partial<Record<"admin" | "owner" | "user" | "all" | string, string>>;
 	timestamps?: boolean;
-	toJSON?: { virtuals?: boolean };
-	toObject?: { virtuals?: boolean };
+	toJSON?: { virtuals?: boolean; flattenMaps?: boolean };
+	toObject?: { virtuals?: boolean; flattenMaps?: boolean };
 	query_limits?: {
 		enabled?: boolean;
 		large_collection_threshold?: number;

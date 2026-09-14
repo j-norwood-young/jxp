@@ -41,7 +41,7 @@ describe("login_rate_limit", () => {
 			lastErr = err;
 		}
 		expect(lastErr).to.exist;
-		lastErr.should.be.instanceof(errors.TooManyRequestsError);
+		expect(lastErr).to.be.instanceof(errors.TooManyRequestsError);
 	});
 
 	it("tracks limits per IP independently", async function () {

@@ -11,7 +11,7 @@ We always use `email` and `password` to identify the user. Passwords are one-way
 
 In a typical application, your front-end site would present a login page asking for the user's email and password. In addition, you would present a "Forgotten Password" link.
 
-When the user submits their username and password, you would POST that data to the `/login` endpoint. If the login succeeds, the response includes their API key and bearer token.
+When the user submits their username and password, you would POST that data to the `/login` endpoint. If the login succeeds, the response includes bearer tokens. API keys are created and managed separately and are never returned by login.
 
 ## Login endpoints
 
@@ -35,7 +35,6 @@ Successful Response (Status 200):
 ```json
 {
     "user_id": "5dadbd7e2384ad419975e4a1",
-    "apikey": "<apikey>",
     "token": "<token>",
     "token_expires": "2025-11-21T21:26:20.671Z",
     "refresh_token": "<refresh_token>",
@@ -203,4 +202,10 @@ Header: `Authorization: Bearer <your bearer token>`
 
 ### API Key
 
-The API Key is a permanent key that doesn't expire. It can be used by adding `?apikey=<apikey>` to the end of any request, or sending `x-api-key: <apikey>` in the header.
+API keys are managed independently from login and can have an expiry, revocation state, and per-model CRUD permissions. They must be sent in the `X-API-Key` header:
+
+```
+X-API-Key: <apikey>
+```
+
+API keys in query parameters are rejected. This prevents credentials from leaking through access logs, browser history, Referer headers, caches, and monitoring systems. Upgrade `jxp-helper` to v3 for automatic header-based requests.

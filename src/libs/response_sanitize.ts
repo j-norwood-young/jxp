@@ -1,4 +1,11 @@
-const DEFAULT_STRIP_FIELDS = ["password"];
+const DEFAULT_STRIP_FIELDS = [
+	"password",
+	"temp_hash",
+	"key_hash",
+	"access_token",
+	"refresh_token",
+	"apikey",
+];
 
 function stripFromObject(obj: Record<string, unknown>, fields: Set<string>): void {
 	for (const key of Object.keys(obj)) {

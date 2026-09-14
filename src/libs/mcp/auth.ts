@@ -20,8 +20,12 @@ function parseApiKey(req: IncomingMessage): string | undefined {
 	const url = req.url || "";
 	const q = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
 	const params = new URLSearchParams(q);
-	const fromQuery = params.get("apikey");
-	return fromQuery || undefined;
+	if (params.has("apikey") || params.has("api_key") || params.has("x-api-key")) {
+		throw new errors.UnauthorizedError(
+			"API keys in query parameters are no longer supported. Send X-API-Key or Authorization: Bearer instead."
+		);
+	}
+	return undefined;
 }
 
 export async function authenticateMcpRequest(req: IncomingMessage, requireApiKey: boolean): Promise<McpAuthContext> {
@@ -34,8 +38,11 @@ export async function authenticateMcpRequest(req: IncomingMessage, requireApiKey
 	}
 
 	let user = null;
+	let apikey = undefined;
 	try {
-		user = await security.apiKeyAuth(apiKey);
+		const result = await security.apiKeyAuthContext(apiKey);
+		user = result.user;
+		apikey = result.apikey;
 	} catch {
 		try {
 			user = await security.bearerAuth(apiKey);
@@ -45,5 +52,5 @@ export async function authenticateMcpRequest(req: IncomingMessage, requireApiKey
 	}
 
 	const groups = await security.getGroups(user._id);
-	return { user, groups };
+	return { user, groups, apikey };
 }

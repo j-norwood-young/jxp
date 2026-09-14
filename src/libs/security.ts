@@ -1,13 +1,19 @@
 const bcrypt = require("bcryptjs");
-const randToken = require("rand-token");
+const crypto = require("node:crypto");
 const errors = require("restify-errors");
 const { getModelFromRegistry } = require("./builtin_models");
+const apikeys = require("./apikeys");
 var APIKey = null;
 var Token = null;
 var Groups = null;
 var User = null;
 var RefreshToken = null;
 var provider = "";
+var passwordRounds = 12;
+var tokenPepper = "";
+
+const generateSecret = () => crypto.randomBytes(32).toString("base64url");
+const hashToken = value => crypto.createHmac("sha256", tokenPepper).update(value).digest("hex");
 
 const bulkwrite_guard = require("./bulkwrite_guard");
 const { logRequestError } = require("./request_log");
@@ -18,6 +24,9 @@ const init = function (models, config) {
 	User = getModelFromRegistry(models, "user");
 	Token = getModelFromRegistry(models, "token");
 	RefreshToken = getModelFromRegistry(models, "refreshtoken");
+	apikeys.init(models, config);
+	passwordRounds = Number(config.bcrypt_rounds || process.env.BCRYPT_ROUNDS || 12);
+	tokenPepper = config.shared_secret || process.env.APIKEY_PEPPER || "";
 	if (config.url) provider = config.url;
 };
 
@@ -70,7 +79,10 @@ const bearerAuthData = req => {
 const bearerAuth = async t => {
 	try {
 		if (!t) throw ("Token invalid");
-		const token = await Token.findOne({ access_token: t, provider }).exec();
+		const token = await Token.findOne({
+			provider,
+			$or: [{ access_token_hash: hashToken(t) }, { access_token: t }],
+		}).exec();
 		if (!token) {
 			throw (`Token ${t} not found`);
 		}
@@ -91,7 +103,7 @@ const bearerAuth = async t => {
 const apiKeyAuth = async apikey => {
 	try {
 		if (!apikey) throw ("Missing apikey");
-		const result = await APIKey.findOne({ apikey });
+		const result = await apikeys.findApiKey(apikey);
 		if (!result) throw ("Could not find apikey");
 		const user = await User.findOne({ _id: result.user_id }).exec();
 		if (!user) throw ("Could not find user associated to apikey");
@@ -100,6 +112,16 @@ const apiKeyAuth = async apikey => {
 		console.error(new Date(), err);
 		throw err;
 	}
+};
+
+const apiKeyAuthContext = async apikey => {
+	if (!apikey) throw ("Missing apikey");
+	const result = await apikeys.findApiKey(apikey);
+	if (!result) throw ("Could not find apikey");
+	const user = await User.findOne({ _id: result.user_id }).exec();
+	if (!user) throw ("Could not find user associated to apikey");
+	await apikeys.markUsed(result);
+	return { user, apikey: result };
 };
 
 const getGroups = async user_id => {
@@ -114,21 +136,18 @@ const getGroups = async user_id => {
 };
 
 const encPassword = password => {
-	return bcrypt.hashSync(password, 4);
+	return bcrypt.hashSync(password, passwordRounds);
 };
 
 const generateApiKey = async user_id => {
 	try {
-		let existing = await APIKey.findOne({ user_id }).sort({ last_accessed: -1 }).exec();
+		let existing = await APIKey.findOne({ user_id, apikey: { $exists: true } }).sort({ last_accessed: -1 }).exec();
 		if (existing) {
 			await existing.updateOne({ last_accessed: new Date() });
 			return existing;
 		}
-		var apikey = new APIKey();
-		apikey.user_id = user_id;
-		apikey.apikey = randToken.generate(16);
-		await apikey.save();
-		return apikey;
+		const result = await apikeys.createApiKey(user_id, { legacyCompatible: true });
+		return result.record;
 	} catch (err) {
 		console.error(new Date(), err);
 		throw err;
@@ -150,9 +169,11 @@ const generateToken = async user_id => {
 	try {
 		var token = new Token();
 		token.user_id = user_id;
-		token.access_token = randToken.generate(16);
+		const rawToken = generateSecret();
+		token.access_token_hash = hashToken(rawToken);
 		token.provider = provider;
 		await token.save();
+		token.access_token = rawToken;
 		return token;
 	} catch (err) {
 		console.error(new Date(), err);
@@ -163,7 +184,7 @@ const generateToken = async user_id => {
 const ensureToken = async user_id => {
 	try {
 		const token = await Token.findOne({ user_id, provider }).sort({ createdAt: -1 }).exec();
-		if (tokenIsValid(token)) {
+		if (tokenIsValid(token) && token.access_token) {
 			return token;
 		}
 		return await generateToken(user_id);
@@ -187,8 +208,10 @@ const generateRefreshToken = async user_id => {
 	try {
 		var refreshtoken = new RefreshToken();
 		refreshtoken.user_id = user_id;
-		refreshtoken.refresh_token = randToken.generate(16);
+		const rawRefreshToken = generateSecret();
+		refreshtoken.refresh_token_hash = hashToken(rawRefreshToken);
 		await refreshtoken.save();
+		refreshtoken.refresh_token = rawRefreshToken;
 		return refreshtoken;
 	} catch (err) {
 		console.error(new Date(), err);
@@ -198,7 +221,7 @@ const generateRefreshToken = async user_id => {
 
 const ensureRefreshToken = async user_id => {
 	const refreshtoken = await RefreshToken.findOne({ user_id }).sort({ createdAt: -1 }).exec();
-	if (tokenIsValid(refreshtoken)) {
+	if (tokenIsValid(refreshtoken) && refreshtoken.refresh_token) {
 		return refreshtoken;
 	}
 	return await generateRefreshToken(user_id);
@@ -212,7 +235,10 @@ const revokeRefreshToken = async user_id => {
 const refresh = async (req, res) => {
 	try {
 		if (req.headers.authorization && req.headers.authorization.trim().toLowerCase().indexOf("bearer") === 0) {
-			const refresh_token = await RefreshToken.findOne({ refresh_token: bearerAuthData(req) }).exec();
+			const rawRefreshToken = bearerAuthData(req);
+			const refresh_token = await RefreshToken.findOne({
+				$or: [{ refresh_token_hash: hashToken(rawRefreshToken) }, { refresh_token: rawRefreshToken }],
+			}).exec();
 			if (!refresh_token) throw ("Refresh token not found");
 			if (!tokenIsValid(refresh_token)) throw ("Refresh token has expired");
 			const user_id = refresh_token.user_id;
@@ -254,20 +280,30 @@ const login = async (req, res) => {
 
 const authenticate = async req => {
 	let user = null;
-	if (!req.query.apikey && !req.headers.authorization && !(req.headers["X-API-Key"] || req.headers["x-api-key"])) {
+	const legacyQueryKey = ["apikey", "api_key", "apiKey", "API_KEY", "x-api-key"]
+		.find((name) => req.query && Object.prototype.hasOwnProperty.call(req.query, name));
+	if (legacyQueryKey) {
+		throw new errors.UnauthorizedError(
+			"API keys in query parameters are no longer supported because they leak into logs, browser history, and Referer headers. " +
+			"Send the key in the X-API-Key header, use Authorization: Bearer <token>, or upgrade jxp-helper to v3."
+		);
+	}
+	if (!req.headers.authorization && !(req.headers["X-API-Key"] || req.headers["x-api-key"])) {
 		return false;
 	}
+	let apikeyRecord = null;
 	if (req.headers.authorization && req.headers.authorization.trim().toLowerCase().indexOf("basic") === 0) {
 		// Basic Auth
 		user = await basicAuth(basicAuthData(req));
 	} else if (req.headers.authorization && req.headers.authorization.trim().toLowerCase().indexOf("bearer") === 0) {
 		// Token Auth
 		user = await bearerAuth(bearerAuthData(req));
-	} else if (req.query.apikey) {
-		user = await apiKeyAuth(req.query.apikey);
 	} else if (req.headers["X-API-Key"] || req.headers["x-api-key"]) {
 		// API Key
-		user = await apiKeyAuth(req.headers["X-API-Key"] || req.headers["x-api-key"])
+		const rawKey = req.headers["X-API-Key"] || req.headers["x-api-key"];
+		const result = await apiKeyAuthContext(Array.isArray(rawKey) ? rawKey[0] : rawKey);
+		user = result.user;
+		apikeyRecord = result.apikey;
 	} else {
 		throw ("Could not find any way to authenticate");
 	}
@@ -275,11 +311,10 @@ const authenticate = async req => {
 		throw ("Could not find user");
 	}
 	return {
-		token: await ensureToken(user._id),
-		refresh_token: await ensureRefreshToken(user._id),
 		groups: await getGroups(user._id),
 		username: user.email,
-		user
+		user,
+		apikey: apikeyRecord
 	}
 
 }
@@ -305,7 +340,11 @@ const auth = async (req, res) => {
 			// console.error("Unsupported operation", req.method);
 			throw new errors.InternalServerError(`Unsupported operation: ${req.method}`);
 		}
-		return await check_perms(res.user, res.groups, req.Model, method, req.params.item_id);
+		enforceKeyScope(res.apikey, req.modelname, method);
+		const effectiveUser = res.apikey?.allow_admin === false
+			? { ...res.user, admin: false }
+			: res.user;
+		return await check_perms(effectiveUser, res.groups, req.Model, method, req.params.item_id);
 	} catch (err) {
 		logRequestError(req, res, err, "auth");
 		if (err.code) throw err;
@@ -315,18 +354,28 @@ const auth = async (req, res) => {
 
 // Bulk auth: admins bypass; others need perms matching each operation (e.g. updateOne → create + update).
 const bulkAuth = async (req, res,) => {
-	if (res.user?.admin) {
-		return;
-	}
 	try {
 		const required = bulkwrite_guard.requiredPermsForBulkOps(req.body);
+		const effectiveUser = res.apikey?.allow_admin === false
+			? { ...res.user, admin: false }
+			: res.user;
 		for (const method of required) {
-			await check_perms(res.user, res.groups, req.Model, method);
+			enforceKeyScope(res.apikey, req.modelname, method);
+			await check_perms(effectiveUser, res.groups, req.Model, method);
 		}
 	} catch (err) {
 		logRequestError(req, res, err, "bulkAuth");
 		if (err.code) throw err;
 		throw new errors.ForbiddenError(err.toString());
+	}
+};
+
+const enforceKeyScope = (key, modelname, method) => {
+	if (!key) return;
+	if (!apikeys.scopeAllows(key, modelname, method)) {
+		throw new errors.ForbiddenError(
+			`API key does not grant ${method} access to model ${modelname}`
+		);
 	}
 };
 
@@ -383,13 +432,15 @@ const admin_only = (req, res, next) => { // Chain after login
 		logRequestError(req, res, err, "admin_only");
 		return next(err);
 	}
-	if (!res.user.admin) {
+	if (!effectiveAdmin(res)) {
 		const err = new errors.ForbiddenError("User not admin");
 		logRequestError(req, res, err, "admin_only");
 		return next(err);
 	}
 	next();
 }
+
+const effectiveAdmin = (res) => Boolean(res.user?.admin && res.apikey?.allow_admin !== false);
 
 const Security = {
 	init,
@@ -411,8 +462,11 @@ const Security = {
 	auth,
 	admin_only,
 	check_perms,
+	enforceKeyScope,
+	effectiveAdmin,
 	getGroups,
 	apiKeyAuth,
+	apiKeyAuthContext,
 	bearerAuth,
 	bulkAuth
 };

@@ -2,6 +2,20 @@
 
 Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 
+## v6.0.0 — unreleased
+
+### Changed
+
+- API keys are accepted only through `X-API-Key`; query-parameter keys now return migration guidance.
+- Login no longer returns an API key. Keys are independently managed, hashed at rest, expirable, revocable, and support per-model CRUD scopes.
+- The docs application and model metadata are protected by a login session.
+- jxp-helper v3 uses native fetch and has no Axios dependency.
+
+### Added
+
+- Additive API key migration and post-v5 plaintext purge commands.
+- Authenticated API key management under `/docs/account/keys`.
+
 ## v5.1.0 — 2026-08-18
 
 ### Fixed
