@@ -17,7 +17,7 @@ const morgan = require("morgan");
 const ws = require("./ws");
 const modeldir = require("./modeldir");
 const query_manipulation = require("./query_manipulation");
-const corsMiddleware = require('restify-cors-middleware2');
+const { createCorsMiddleware } = require("./cors");
 const cache = require("./cache");
 const query_limits = require("./query_limits");
 const query_sanitize = require("./query_sanitize");
@@ -923,7 +923,7 @@ const JXP = function (options: JXPConfig) {
 
 	// CORS
 	const corsOrigins = config.cors?.origins?.length ? config.cors.origins : ["*"];
-	const cors = corsMiddleware({
+	const cors = createCorsMiddleware({
 		preflightMaxAge: 5, //Optional
 		origins: corsOrigins,
 		allowHeaders: ['X-Requested-With', 'Authorization', 'X-API-Key', 'Content-Type'],

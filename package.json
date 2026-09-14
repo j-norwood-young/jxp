@@ -112,7 +112,6 @@
 		"pug": "^3.0.4",
 		"readline-sync": "^1.4.10",
 		"restify": "^12.0.0",
-		"restify-cors-middleware2": "^2.2.1",
 		"restify-errors": "^8.1.0",
 		"traverse": "^0.6.11",
 		"underscore": "^1.13.8",
