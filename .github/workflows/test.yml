@@ -19,6 +19,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
+          # package-lock.json is gitignored — cannot use cache: npm
       - run: npm install --legacy-peer-deps
       - run: npm test
