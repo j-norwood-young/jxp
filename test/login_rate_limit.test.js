@@ -4,6 +4,7 @@ const { createLoginThrottle } = require("../dist/libs/login_rate_limit");
 
 function mockReq(ip = "203.0.113.50") {
 	return {
+		socket: { remoteAddress: ip },
 		connection: { remoteAddress: ip },
 		headers: {},
 		log: {

@@ -22,9 +22,8 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          # Node 24 removes process.binding('http_parser'); restify@11 → spdy still needs it.
-          # Trusted publishing works on Node 22.14+ with a current npm CLI.
-          node-version: '22'
+          # Trusted publishing works on Node 22.14+; restify@12 supports Node 24+.
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
 
@@ -40,7 +39,6 @@ jobs:
             exit 1
           fi
 
-      # package-lock.json is gitignored in this repo
-      - run: npm install --legacy-peer-deps
+      - run: npm install
       - run: npm test
       - run: npm publish

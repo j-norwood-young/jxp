@@ -8,7 +8,6 @@ https://jxp.readthedocs.io/en/latest/
 
 */
 
-import "../libs/startup-deprecations";
 import path from "path";
 import mongoose from "mongoose";
 import JXP = require("../libs/jxp");
