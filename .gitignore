@@ -2,7 +2,6 @@
 node_modules/*
 logs/*
 *.log
-package-lock.json
 site/*
 yarn.lock
 dist/
