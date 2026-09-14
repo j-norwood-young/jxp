@@ -15,6 +15,8 @@ process.env.PORT = process.env.PORT || "4005";
 process.env.MONGO_CONNECTION_STRING =
 	process.env.MONGO_CONNECTION_STRING || "mongodb://127.0.0.1/test";
 process.env.LOG_FILE = process.env.LOG_FILE || "./logs/test.log";
+process.env.SHARED_SECRET = process.env.SHARED_SECRET || "test-shared-secret";
+process.env.APIKEY_PEPPER = process.env.APIKEY_PEPPER || "test-apikey-pepper";
 process.env.CACHE_ENABLED = process.env.CACHE_ENABLED ?? "true";
 process.env.CACHE_DEBUG = process.env.CACHE_DEBUG ?? "true";
 process.env.CACHE_TTL = process.env.CACHE_TTL || "600";
