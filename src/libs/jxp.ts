@@ -917,6 +917,7 @@ const JXP = function (options: JXPConfig) {
 		console.log("Logging to", config.log);
 	}
 
+	fs.mkdirSync(path.dirname(path.resolve(config.log)), { recursive: true });
 	var accessLogStream = fs.createWriteStream(config.log, { flags: "a" });
 	server.use(morgan(SAFE_COMBINED_LOG_FORMAT, { stream: accessLogStream }));
 
