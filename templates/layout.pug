@@ -1,12 +1,18 @@
 doctype html
-html(lang="en" data-docs-access=docs_access)
+html(lang="en" data-bs-theme="dark" data-docs-access=docs_access)
   head
     meta(charset="utf-8")
     meta(name="viewport" content="width=device-width, initial-scale=1")
+    meta(name="color-scheme" content="dark")
     title= title
+    link(rel="icon" href=`/docs/assets/jxp-logo.svg?v=${version}` type="image/svg+xml")
+    link(rel="apple-touch-icon" href=`/docs/assets/jxp-logo.svg?v=${version}`)
+    link(rel="preconnect" href="https://fonts.googleapis.com")
+    link(rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous")
+    link(rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap")
     link(rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" crossorigin="anonymous")
     link(rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css")
-    link(rel="stylesheet" href="/docs/assets/docs.css")
+    link(rel="stylesheet" href=`/docs/assets/docs.css?v=${version}`)
   body.docs-body
     include navbar
     if hide_sidebar
@@ -18,5 +24,5 @@ html(lang="en" data-docs-access=docs_access)
         main.docs-main
           block content
     script(src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous")
-    script(src="/docs/assets/api-console.js" defer)
+    script(src=`/docs/assets/api-console.js?v=${version}` defer)
     block javascripts
