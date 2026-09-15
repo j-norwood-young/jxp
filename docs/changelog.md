@@ -2,12 +2,10 @@
 
 Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 
-## v6.1.0 — 2026-09-15
+## v6.1.1 — 2026-09-15
 
 ### Added
 
-- **Startup index alignment** — on boot, fully sync indexes for primary auth models (`User`, `APIKey`, `Token`, `RefreshToken`, `Usergroup`) so stale unique indexes (e.g. legacy one-key-per-user on `apikeys`) cannot block login; warn about missing indexes on other models. Disable with `index_diagnostics.ensure_primary_on_startup: false`. See [Index diagnostics](index_diagnostics.md#startup-primary-auth-models).
-- **Docs branding** — favicon and brand mark use the JXP logo (`/docs/assets/jxp-logo.svg`).
 - **Docs re-auth modal** — when the ephemeral docs console API key is missing, revoked, or expired while a session cookie remains, the docs UI prompts for login again via a modal instead of appearing signed in with a dead key.
 - **Concurrent docs sessions** — logging in from a second browser no longer revokes the first browser’s Docs console key; each login gets its own ephemeral key (re-login in the same browser still replaces that browser’s prior key).
 
@@ -17,9 +15,21 @@ Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 
 ### Changed
 
+- **Docs session** — `GET /docs/session` and protected docs middleware require the linked console API key to still be active; otherwise the session cookie is cleared.
+
+---
+
+## v6.1.0 — 2026-09-15
+
+### Added
+
+- **Startup index alignment** — on boot, fully sync indexes for primary auth models (`User`, `APIKey`, `Token`, `RefreshToken`, `Usergroup`) so stale unique indexes (e.g. legacy one-key-per-user on `apikeys`) cannot block login; warn about missing indexes on other models. Disable with `index_diagnostics.ensure_primary_on_startup: false`. See [Index diagnostics](index_diagnostics.md#startup-primary-auth-models).
+- **Docs branding** — favicon and brand mark use the JXP logo (`/docs/assets/jxp-logo.svg`).
+
+### Changed
+
 - **Docs UI** — full-bleed graphite/amber landing; dark-mode polish across docs templates; guests see Documentation + Login, not API explorer chrome.
 - **Docs sidebar** — guests see Guides only; Operations and API appear after login.
-- **Docs session** — `GET /docs/session` and protected docs middleware require the linked console API key to still be active; otherwise the session cookie is cleared.
 
 ---
 
