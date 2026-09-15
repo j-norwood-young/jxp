@@ -19,6 +19,8 @@ describe("security hardening", () => {
 	let apikey = null;
 
 	before(async function () {
+		// init + bcrypt login exceeds the suite's 1s default on slower CI runners.
+		this.timeout(10000);
 		await init.init();
 		const loginRes = await chai.request(server)
 			.post("/login")
