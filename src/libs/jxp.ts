@@ -584,7 +584,7 @@ const actionAggregate = async (req, res) => {
 	}
 	for (const stage of query) {
 		if (stage && typeof stage === "object" && stage.$match) {
-			query_sanitize.sanitizeFilter(stage.$match, getSecurityOpts(req));
+			query_sanitize.sanitizeAggregateMatch(stage.$match, getSecurityOpts(req));
 		}
 	}
 	try {

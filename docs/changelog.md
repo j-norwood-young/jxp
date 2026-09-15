@@ -2,6 +2,14 @@
 
 Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 
+## v6.1.2 — 2026-09-15
+
+### Fixed
+
+- **Aggregate `$expr`** — `$match` stages in `/aggregate` no longer reject `$expr`. List/query filters still deny `$expr`; `$where`, `$function`, `$accumulator`, and `$jsonSchema` remain blocked in both contexts. Matches documented aggregation examples.
+
+---
+
 ## v6.1.1 — 2026-09-15
 
 ### Added

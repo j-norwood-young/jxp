@@ -51,6 +51,55 @@ describe("security hardening", () => {
 			});
 	});
 
+	it("rejects filter with $expr", (done) => {
+		chai.request(server)
+			.get('/api/test?filter[$expr][$eq][0]=$foo&filter[$expr][$eq][1]=bar&limit=10')
+			.auth(init.email, init.password)
+			.end((err, res) => {
+				res.should.have.status(400);
+				done();
+			});
+	});
+
+	it("allows $expr in aggregate $match", (done) => {
+		chai.request(server)
+			.post("/aggregate/test")
+			.auth(init.email, init.password)
+			.send({
+				query: [
+					{
+						$match: {
+							$expr: {
+								$gte: [
+									"$createdAt",
+									{ $dateFromString: { dateString: "2020-01-01T00:00:00.000Z" } },
+								],
+							},
+						},
+					},
+					{ $group: { _id: null, count: { $sum: 1 } } },
+				],
+			})
+			.end((err, res) => {
+				res.should.have.status(200);
+				res.body.data.should.be.an("array");
+				done();
+			});
+	});
+
+	it("rejects $where in aggregate $match", (done) => {
+		chai.request(server)
+			.post("/aggregate/test")
+			.auth(init.email, init.password)
+			.send({
+				query: [{ $match: { $where: "true" } }],
+			})
+			.end((err, res) => {
+				res.should.have.status(400);
+				done();
+			});
+	});
+
 	it("strips password from list responses", (done) => {
 		Test.deleteMany(() => {
 			const item = new Test({ foo: "pw", bar: "pwbar", password: "secret" });

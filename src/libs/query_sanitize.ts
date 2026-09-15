@@ -1,5 +1,6 @@
 const errors = require("restify-errors");
 
+/** Operators denied in list/query filters (and by default). */
 const DEFAULT_DENY_OPERATORS = new Set([
 	"$where",
 	"$function",
@@ -8,12 +9,25 @@ const DEFAULT_DENY_OPERATORS = new Set([
 	"$jsonSchema",
 ]);
 
+/**
+ * Operators denied inside aggregate `$match` stages.
+ * `$expr` is allowed here — it is a normal aggregation match form and is
+ * documented for `/aggregate`. Dangerous nested ops (`$where`, `$function`, …)
+ * remain denied at any depth.
+ */
+const AGGREGATE_MATCH_DENY_OPERATORS = new Set([
+	"$where",
+	"$function",
+	"$accumulator",
+	"$jsonSchema",
+]);
+
 const MAX_REGEX_LENGTH = 256;
 const NESTED_QUANTIFIER = /(\*|\?|\+|\{)\s*(\*|\?|\+|\{)/;
 
-function getDenySet(custom?: string[]): Set<string> {
-	if (!custom || !custom.length) return DEFAULT_DENY_OPERATORS;
-	return new Set([...DEFAULT_DENY_OPERATORS, ...custom]);
+function getDenySet(base: Set<string>, custom?: string[]): Set<string> {
+	if (!custom || !custom.length) return new Set(base);
+	return new Set([...base, ...custom]);
 }
 
 function validateRegex(pattern: string): void {
@@ -82,9 +96,22 @@ export function sanitizeFilter(
 	if (!filter || typeof filter !== "object" || Array.isArray(filter)) {
 		return (filter as Record<string, unknown>) || {};
 	}
-	const deny = getDenySet(options?.filter_operators_deny);
+	const deny = getDenySet(DEFAULT_DENY_OPERATORS, options?.filter_operators_deny);
 	walkQuery(filter, deny);
 	return filter as Record<string, unknown>;
+}
+
+/** Sanitize a `$match` body in an aggregation pipeline (`$expr` allowed). */
+export function sanitizeAggregateMatch(
+	match: unknown,
+	options?: { filter_operators_deny?: string[] }
+): Record<string, unknown> {
+	if (!match || typeof match !== "object" || Array.isArray(match)) {
+		return (match as Record<string, unknown>) || {};
+	}
+	const deny = getDenySet(AGGREGATE_MATCH_DENY_OPERATORS, options?.filter_operators_deny);
+	walkQuery(match, deny);
+	return match as Record<string, unknown>;
 }
 
 export function parseSearchObject(search: unknown): Record<string, RegExp> {
@@ -108,6 +135,8 @@ export function parseSearchObject(search: unknown): Record<string, RegExp> {
 
 module.exports = {
 	sanitizeFilter,
+	sanitizeAggregateMatch,
 	parseSearchObject,
 	DEFAULT_DENY_OPERATORS: [...DEFAULT_DENY_OPERATORS],
+	AGGREGATE_MATCH_DENY_OPERATORS: [...AGGREGATE_MATCH_DENY_OPERATORS],
 };
