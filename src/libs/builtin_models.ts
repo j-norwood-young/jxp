@@ -10,6 +10,8 @@ export const BUILTIN_MODEL_SLUGS = [
 	"refreshtoken",
 	"usergroups",
 	"indexquerylog",
+	"webauthncredential",
+	"authchallenge",
 ] as const;
 
 export type BuiltinModelSlug = (typeof BUILTIN_MODEL_SLUGS)[number];

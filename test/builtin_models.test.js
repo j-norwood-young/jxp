@@ -13,9 +13,11 @@ const {
 } = require("../dist/libs/builtin_models");
 
 describe("builtin_models", () => {
-	it("exposes built-in slugs including indexquerylog", () => {
+	it("exposes built-in slugs including indexquerylog and MFA models", () => {
 		expect(BUILTIN_MODEL_SLUGS).to.include("indexquerylog");
 		expect(BUILTIN_MODEL_SLUGS).to.include("user");
+		expect(BUILTIN_MODEL_SLUGS).to.include("webauthncredential");
+		expect(BUILTIN_MODEL_SLUGS).to.include("authchallenge");
 	});
 
 	it("resolves jxp package models directory", () => {
@@ -23,6 +25,8 @@ describe("builtin_models", () => {
 		expect(fs.existsSync(dir)).to.be.true;
 		expect(fs.existsSync(path.join(dir, "user_model.js"))).to.be.true;
 		expect(fs.existsSync(path.join(dir, "indexquerylog_model.js"))).to.be.true;
+		expect(fs.existsSync(path.join(dir, "webauthncredential_model.js"))).to.be.true;
+		expect(fs.existsSync(path.join(dir, "authchallenge_model.js"))).to.be.true;
 	});
 
 	it("loadAllModels adds indexquerylog when absent from empty app dir", () => {

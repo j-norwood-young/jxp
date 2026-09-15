@@ -56,6 +56,7 @@ describe('Test', () => {
 
 
 	var apikey = null;
+	var admin_apikey = null;
 	var token = null;
 	var refresh_token = null;
 	var user_id = null;
@@ -78,12 +79,22 @@ describe('Test', () => {
 					const expectedProvider = process.env.API_URL || process.env.API_SERVER
 						|| `http://localhost:${process.env.PORT || "4005"}`;
 					res.body.provider.should.be.eql(expectedProvider);
-					security.generateApiKey(res.body.user_id).then((record) => {
-						apikey = record.apikey;
-						done();
-					}).catch(done);
 					token = res.body.token;
 					user_id = res.body.user_id;
+					Promise.all([
+						security.generateApiKey(res.body.user_id),
+						chai.request(server)
+							.post("/login")
+							.send({ email: init.admin_email, password: init.admin_password })
+							.then((adminRes) => {
+								adminRes.should.have.status(200);
+								return security.generateApiKey(adminRes.body.user_id);
+							}),
+					]).then(([userKey, adminKey]) => {
+						apikey = userKey.apikey;
+						admin_apikey = adminKey.apikey;
+						done();
+					}).catch(done);
 				});
 		});
 	});
@@ -153,13 +164,13 @@ describe('Test', () => {
 	});
 
 	describe("Authentication", () => {
-		it("should authenticate with basic auth", done => {
+		it("should reject basic auth with migration guidance", done => {
 			chai.request(server)
 				.get("/api/user?limit=1000")
 				.auth(init.email, init.password)
 				.end((err, res) => {
-					res.should.have.status(200);
-					res.body.data.should.be.an('array');
+					res.should.have.status(401);
+					String(res.body.message || res.text || "").should.match(/Basic Auth is no longer supported/i);
 					done();
 				});
 		});
@@ -245,7 +256,7 @@ describe('Test', () => {
 			};
 			chai.request(server)
 				.post("/api/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send(test)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -273,7 +284,7 @@ describe('Test', () => {
 			};
 			chai.request(server)
 				.post("/api/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send(test)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -309,7 +320,7 @@ describe('Test', () => {
 			chai.request(server)
 				.put("/api/test/" + post_id)
 				.send(test)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data.should.be.an('object');
@@ -355,7 +366,7 @@ describe('Test', () => {
 		it("should filter by exact date", (done) => {
 			chai.request(server)
 				.get(`/api/test?filter[date_field]=${testDate.toISOString()}&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data.should.be.an('array');
@@ -373,7 +384,7 @@ describe('Test', () => {
 
 			chai.request(server)
 				.get(`/api/test?filter[date_field]=$gte:${startDate.toISOString()}&filter[date_field]=$lte:${endDate.toISOString()}&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data.should.be.an('array');
@@ -391,7 +402,7 @@ describe('Test', () => {
 
 			chai.request(server)
 				.get(`/api/test?filter[date_field]=$gte:${startDate.toISOString()}&filter[date_field]=$lte:${endDate.toISOString()}&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data.should.be.an('array');
@@ -404,7 +415,7 @@ describe('Test', () => {
 		it("should handle invalid date formats gracefully", (done) => {
 			chai.request(server)
 				.get('/api/test?filter[date_field]=invalid-date&limit=1000')
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(500);
 					res.body.should.have.property('code', 'InternalServer');
@@ -418,7 +429,7 @@ describe('Test', () => {
 
 			chai.request(server)
 				.get(`/api/test?filter[date_field]=${futureDate.toISOString()}&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data.should.be.an('array');
@@ -432,7 +443,7 @@ describe('Test', () => {
 		it("it should GET a single test contained in a data object", (done) => {
 			chai.request(server)
 				.get("/api/test/" + post_id)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("data");
@@ -454,7 +465,7 @@ describe('Test', () => {
 			}
 			chai.request(server)
 				.post("/api/link")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send(data)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -469,7 +480,7 @@ describe('Test', () => {
 		it("should link a LINK item to a TEST", done => {
 			chai.request(server)
 				.put("/api/test/" + post_id)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({ link_id })
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -487,7 +498,7 @@ describe('Test', () => {
 			}
 			chai.request(server)
 				.post("/api/link")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send(data)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -502,7 +513,7 @@ describe('Test', () => {
 		it("should link another LINK item to a TEST", done => {
 			chai.request(server)
 				.put("/api/test/" + post_id)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({ other_link_id })
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -515,7 +526,7 @@ describe('Test', () => {
 		it("should non-descructively autopopulate on a single record", done => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?populate=link`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("data");
@@ -531,7 +542,7 @@ describe('Test', () => {
 		it("should non-descructively autopopulate on a single record to a specific virtual", done => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?populate=other_link`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("data");
@@ -547,7 +558,7 @@ describe('Test', () => {
 		it("should autopopulate on all records", done => {
 			chai.request(server)
 				.get(`/api/test?autopopulate=true&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data[0].should.have.property("link")
@@ -564,7 +575,7 @@ describe('Test', () => {
 		it("should autopopulate on a single records", done => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?autopopulate=true`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data.should.have.property("link")
@@ -581,7 +592,7 @@ describe('Test', () => {
 		it("should non-destructively populate link on a single record", done => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?populate=link`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("data");
@@ -596,7 +607,7 @@ describe('Test', () => {
 		it("should populate link_id on all records", done => {
 			chai.request(server)
 				.get(`/api/test?populate=link&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data[0].should.have.property("link")
@@ -610,7 +621,7 @@ describe('Test', () => {
 		it("should populate just val from link_id on a single record", done => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?populate[link]=val`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("data");
@@ -624,7 +635,7 @@ describe('Test', () => {
 		it("should populate just val from link_id on all records", done => {
 			chai.request(server)
 				.get(`/api/test?populate[link]=val&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data[0].link.should.have.property("val")
@@ -636,7 +647,7 @@ describe('Test', () => {
 		it("should populate name and val from link_id on a single record", done => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?populate[link]=val,name`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("data");
@@ -650,7 +661,7 @@ describe('Test', () => {
 		it("should populate name and val from link_id on all records", done => {
 			chai.request(server)
 				.get(`/api/test?populate[link]=val,name&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data[0].link.should.have.property("val")
@@ -662,7 +673,7 @@ describe('Test', () => {
 		it("should populate link_id and other_link_id on a single record", done => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?populate[]=link&populate[]=other_link`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("data");
@@ -680,7 +691,7 @@ describe('Test', () => {
 		it("should populate link_id and other_link_id on all records", done => {
 			chai.request(server)
 				.get(`/api/test?populate[]=link&populate[]=other_link&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data[0].link.should.have.property("val")
@@ -695,7 +706,7 @@ describe('Test', () => {
 		it("should link an array of links to TEST", done => {
 			chai.request(server)
 				.put("/api/test/" + post_id)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({ array_link_id: [link_id, other_link_id] })
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -709,7 +720,7 @@ describe('Test', () => {
 		it("should populate an array of links", done => {
 			chai.request(server)
 				.get(`/api/test?populate=array_link&limit=1000`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data[0].should.have.property("array_link");
@@ -737,7 +748,7 @@ describe('Test', () => {
 				};
 				chai.request(server)
 					.post("/query/test?limit=1000")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -764,7 +775,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -783,7 +794,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send(query)
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -809,7 +820,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -836,7 +847,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -860,7 +871,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -884,7 +895,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -907,7 +918,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -930,7 +941,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -953,7 +964,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -971,7 +982,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/aggregate/test?allowDiskUse=true")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send({ query })
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -987,7 +998,7 @@ describe('Test', () => {
 			it("it should make sure we are set up right", done => {
 				chai.request(server)
 					.get("/api/test?limit=1000&count=true")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.end((err, res) => {
 						res.should.have.status(200);
 						res.body.data.should.be.an('array');
@@ -1037,7 +1048,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/bulkwrite/test")
-					.auth(init.admin_email, init.admin_password)
+					.set("X-API-Key", admin_apikey)
 					.send(query)
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -1054,7 +1065,7 @@ describe('Test', () => {
 			it("it should test bulkwrite", (done) => {
 				chai.request(server)
 					.get("/api/test?sort[createdAt]=1&limit=1000&count=true")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.end((err, res) => {
 						res.should.have.status(200);
 						res.body.data.should.be.an('array');
@@ -1077,7 +1088,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/bulkwrite/link")
-					.auth(init.admin_email, init.admin_password)
+					.set("X-API-Key", admin_apikey)
 					.send(query)
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -1098,7 +1109,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/bulkwrite/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send(query)
 					.end((err, res) => {
 						res.should.have.status(200);
@@ -1119,7 +1130,7 @@ describe('Test', () => {
 				];
 				chai.request(server)
 					.post("/bulkwrite/link")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send(query)
 					.end((err, res) => {
 						res.should.have.status(403);
@@ -1132,7 +1143,7 @@ describe('Test', () => {
 				const query = [{ deleteOne: { filter: { foo: "Foo3" } } }];
 				chai.request(server)
 					.post("/bulkwrite/test")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.send(query)
 					.end((err, res) => {
 						res.should.have.status(403);
@@ -1143,7 +1154,7 @@ describe('Test', () => {
 		// it("should $push to an array", done => {
 		// 	chai.request(server)
 		// 		.patch("/api/test/" + post_id)
-		// 		.auth(init.email, init.password)
+		// 		.set("X-API-Key", apikey)
 		// 		.send({ $push: { shmack: "fah" } })
 		// 		.end((err, res) => {
 		// 			// console.log(res.body.data);
@@ -1211,7 +1222,7 @@ describe('Test', () => {
 
 			chai.request(server)
 				.post("/api/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send(complexData)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -1271,7 +1282,7 @@ describe('Test', () => {
 
 			chai.request(server)
 				.post("/api/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send(testData)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -1280,7 +1291,7 @@ describe('Test', () => {
 					// Now retrieve and verify
 					chai.request(server)
 						.get(`/api/test/${testId}`)
-						.auth(init.email, init.password)
+						.set("X-API-Key", apikey)
 						.end((err, res) => {
 							res.should.have.status(200);
 							res.body.data.mixed_array[0].deep.nested.object.should.equal(true);
@@ -1297,7 +1308,7 @@ describe('Test', () => {
 		it("should soft-delete an item", (done) => {
 			chai.request(server)
 				.del(`/api/test/${post_id}`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.status.should.equal('ok');
@@ -1307,7 +1318,7 @@ describe('Test', () => {
 		it("should show item as deleted", (done) => {
 			chai.request(server)
 				.get(`/api/test/${post_id}`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(404);
 					res.body.message.should.equal(`Document ${post_id} is deleted on Test`);
@@ -1318,7 +1329,7 @@ describe('Test', () => {
 		it("should show item", (done) => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?showDeleted=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data._deleted.should.equal(true);
@@ -1332,7 +1343,7 @@ describe('Test', () => {
 				.send({
 					_deleted: false
 				})
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.status.should.equal('ok');
@@ -1342,7 +1353,7 @@ describe('Test', () => {
 		it("should show item", (done) => {
 			chai.request(server)
 				.get(`/api/test/${post_id}`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data._deleted.should.equal(false);
@@ -1353,7 +1364,7 @@ describe('Test', () => {
 		it("should permanently delete item", (done) => {
 			chai.request(server)
 				.del(`/api/test/${post_id}?_permaDelete=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.status.should.equal('ok');
@@ -1363,7 +1374,7 @@ describe('Test', () => {
 		it("should fail to find item", (done) => {
 			chai.request(server)
 				.get(`/api/test/${post_id}?showDeleted=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(404);
 					done();
@@ -1379,7 +1390,7 @@ describe('Test', () => {
 			}
 			chai.request(server)
 				.post("/api/link")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send(data)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -1394,7 +1405,7 @@ describe('Test', () => {
 		it("should link a LINK item to a TEST", done => {
 			chai.request(server)
 				.post("/api/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({
 					link_id
 				})
@@ -1410,7 +1421,7 @@ describe('Test', () => {
 		it("should fail because a parent item exists", (done) => {
 			chai.request(server)
 				.del(`/api/link/${link_id}`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(409);
 					res.body.message.should.equal(`Parent link item exists in test/link_id`);
@@ -1420,7 +1431,7 @@ describe('Test', () => {
 		it("should cascade delete", (done) => {
 			chai.request(server)
 				.del(`/api/link/${link_id}?_cascade=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.status.should.equal('ok');
@@ -1430,7 +1441,7 @@ describe('Test', () => {
 		it("link item should no longer exist", (done) => {
 			chai.request(server)
 				.get(`/api/test/${test_with_links_id}`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(404);
 					res.body.message.should.equal(`Document ${test_with_links_id} is deleted on Test`);
@@ -1440,7 +1451,7 @@ describe('Test', () => {
 		it("link item should be soft-deleted", (done) => {
 			chai.request(server)
 				.get(`/api/test/${test_with_links_id}?showDeleted=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					done();
@@ -1454,7 +1465,7 @@ describe('Test', () => {
 			}
 			chai.request(server)
 				.post("/api/link")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send(data)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -1469,7 +1480,7 @@ describe('Test', () => {
 		it("should link a LINK item to a TEST", done => {
 			chai.request(server)
 				.post("/api/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({
 					link_id,
 					bar: "link1"
@@ -1486,7 +1497,7 @@ describe('Test', () => {
 		it("should fail because a parent item exists", (done) => {
 			chai.request(server)
 				.del(`/api/link/${link_id}`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(409);
 					res.body.message.should.equal(`Parent link item exists in test/link_id`);
@@ -1496,7 +1507,7 @@ describe('Test', () => {
 		it("should cascade delete", (done) => {
 			chai.request(server)
 				.del(`/api/link/${link_id}?_cascade=1&_permaDelete=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.status.should.equal('ok');
@@ -1506,7 +1517,7 @@ describe('Test', () => {
 		it("link item should be permanently deleted", (done) => {
 			chai.request(server)
 				.get(`/api/test/${test_with_links_id}?showDeleted=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(404);
 					done();
@@ -1522,7 +1533,7 @@ describe('Test', () => {
 			};
 			chai.request(server)
 				.post("/api/user")
-				.auth(init.admin_email, init.admin_password)
+				.set("X-API-Key", admin_apikey)
 				.send(user)
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -1533,7 +1544,7 @@ describe('Test', () => {
 		it("it should GET a user with a + in email", (done) => {
 			chai.request(server)
 				.get("/api/user?filter[email]=plus%2Buser@gmail.com&limit=1000")
-				.auth(init.admin_email, init.admin_password)
+				.set("X-API-Key", admin_apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.data[0].should.have.property("_id");
@@ -1546,7 +1557,7 @@ describe('Test', () => {
 		it("should get an error", (done) => {
 			chai.request(server)
 				.post("/api/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({
 					error: true,
 					bar: "Throw an error"
@@ -1572,7 +1583,7 @@ describe('Test', () => {
 		it("should give us cache stats", (done) => {
 			chai.request(server)
 				.get("/cache/stats")
-				.auth(init.admin_email, init.admin_password)
+				.set("X-API-Key", admin_apikey)
 				.end((err, res) => {
 					// console.log(res.body);
 					res.should.have.status(200);
@@ -1583,7 +1594,7 @@ describe('Test', () => {
 		it("should clear the cache stats", (done) => {
 			chai.request(server)
 				.get("/cache/clear")
-				.auth(init.admin_email, init.admin_password)
+				.set("X-API-Key", admin_apikey)
 				.end((err, res) => {
 					// console.log(res.body);
 					res.should.have.status(200);
@@ -1593,7 +1604,7 @@ describe('Test', () => {
 		it("should get an uncached request", (done) => {
 			chai.request(server)
 				.get("/api/test?limit=1000")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.headers.should.have.property("jxp-cache");
@@ -1604,7 +1615,7 @@ describe('Test', () => {
 		it("should get an cached request", (done) => {
 			chai.request(server)
 				.get("/api/test?limit=1000")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.headers.should.have.property("jxp-cache");
@@ -1615,7 +1626,7 @@ describe('Test', () => {
 		it("should give us cache stats", (done) => {
 			chai.request(server)
 				.get("/cache/stats")
-				.auth(init.admin_email, init.admin_password)
+				.set("X-API-Key", admin_apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("hits");
@@ -1630,7 +1641,7 @@ describe('Test', () => {
 		it("should get a test record", done => {
 			chai.request(server)
 				.get(`/api/test?populate=link&limit=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					// console.log(res.headers)
 					res.should.have.status(200);
@@ -1645,7 +1656,7 @@ describe('Test', () => {
 		it("should get a cached test record", done => {
 			chai.request(server)
 				.get(`/api/test?populate=link&limit=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					// console.log(res.headers)
 					res.should.have.status(200);
@@ -1659,7 +1670,7 @@ describe('Test', () => {
 		it("should add a link record", done => {
 			chai.request(server)
 				.post(`/api/link`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({
 					name: "cache_test",
 					val: "YoYoYo"
@@ -1675,7 +1686,7 @@ describe('Test', () => {
 		it("should put link_id into test record", done => {
 			chai.request(server)
 				.put(`/api/test/${test_id}`)
-				.auth(init.admin_email, init.admin_password)
+				.set("X-API-Key", admin_apikey)
 				.send({
 					link_id
 				})
@@ -1690,7 +1701,7 @@ describe('Test', () => {
 		it("should get a test record with link", done => {
 			chai.request(server)
 				.get(`/api/test?populate=link&limit=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					// console.log(res.body)
 					res.should.have.status(200);
@@ -1707,7 +1718,7 @@ describe('Test', () => {
 		it("should update link record", done => {
 			chai.request(server)
 				.put(`/api/link/${link_id}`)
-				.auth(init.admin_email, init.admin_password)
+				.set("X-API-Key", admin_apikey)
 				.send({
 					val: "YoYoYo2"
 				})
@@ -1722,7 +1733,7 @@ describe('Test', () => {
 		it("should get a test record with updated link", done => {
 			chai.request(server)
 				.get(`/api/test?populate=link&limit=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					// console.log(res.body.data[0].link)
 					res.should.have.status(200);
@@ -1742,7 +1753,7 @@ describe('Test', () => {
 		it("applies default limit when list GET omits limit", (done) => {
 			chai.request(server)
 				.get("/api/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("limit").eql(100);
@@ -1754,7 +1765,7 @@ describe('Test', () => {
 		it("returns 200 for list GET with valid limit", (done) => {
 			chai.request(server)
 				.get("/api/test?limit=10")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("limit").eql(10);
@@ -1766,7 +1777,7 @@ describe('Test', () => {
 		it("caps limit when client requests above max", (done) => {
 			chai.request(server)
 				.get("/api/test?limit=5000")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("limit").eql(1000);
@@ -1779,7 +1790,7 @@ describe('Test', () => {
 		it("applies default limit for filtered list GET without limit", (done) => {
 			chai.request(server)
 				.get("/api/test?filter[foo]=Foo1")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.end((err, res) => {
 					res.should.have.status(200);
 					res.body.should.have.property("limit").eql(100);
@@ -1791,7 +1802,7 @@ describe('Test', () => {
 		it("applies default limit for POST /query without limit", (done) => {
 			chai.request(server)
 				.post("/query/test")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({ query: { foo: "Foo1" } })
 				.end((err, res) => {
 					res.should.have.status(200);
@@ -1803,7 +1814,7 @@ describe('Test', () => {
 		it("returns 200 for POST /query with valid limit", (done) => {
 			chai.request(server)
 				.post("/query/test?limit=10")
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({ query: { foo: "Foo1" } })
 				.end((err, res) => {
 					res.should.have.status(200);

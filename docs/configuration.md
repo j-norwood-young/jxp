@@ -72,6 +72,20 @@ Enabled by default on `POST /login` and `POST /docs/session` (docs sign-in after
 
 Over-limit clients receive HTTP **429**. Response headers include rate-limit hints when supported by Restify.
 
+## MFA and passkeys
+
+Programmatic / env options for TOTP and WebAuthn:
+
+| Variable / config | Description | Default |
+|-------------------|-------------|---------|
+| `MFA_TOTP_ISSUER` / `mfa.totp_issuer` | Label in `otpauth://` URIs | `JXP` |
+| `MFA_CHALLENGE_TTL` / `mfa.challenge_ttl` | MFA / WebAuthn challenge JWT TTL | `5m` |
+| `WEBAUTHN_RP_NAME` / `webauthn.rp_name` | Relying party display name | `JXP` |
+| `WEBAUTHN_RP_ID` / `webauthn.rp_id` | RP ID (hostname only) | hostname of `API_URL` |
+| `WEBAUTHN_ORIGINS` / `webauthn.origins` | Comma-separated allowed origins | `[API_URL]` |
+
+`SHARED_SECRET` is required to encrypt TOTP secrets and sign challenge JWTs. See [Authentication](authentication.md#multi-factor-authentication-totp).
+
 ## Cache
 
 ```

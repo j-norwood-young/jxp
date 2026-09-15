@@ -43,6 +43,22 @@ export interface LoginRateLimitConfig {
 	xff?: boolean;
 }
 
+export interface JXPMfaConfig {
+	/** Issuer label in otpauth URIs (default: "JXP") */
+	totp_issuer?: string;
+	/** MFA challenge JWT TTL, e.g. "5m" (default: "5m") */
+	challenge_ttl?: string;
+}
+
+export interface JXPWebAuthnConfig {
+	/** Relying party display name (default: "JXP") */
+	rp_name?: string;
+	/** Relying party ID — hostname only (default: hostname from config.url) */
+	rp_id?: string;
+	/** Allowed browser origins (default: [config.url]) */
+	origins?: string[];
+}
+
 export interface JXPDocsConfig {
 	/** protected (default) | disabled | public */
 	access?: "protected" | "disabled" | "public";
@@ -132,6 +148,8 @@ export interface JXPConfig {
 	index_diagnostics?: JXPIndexDiagnosticsConfig;
 	docs?: JXPDocsConfig;
 	login_rate_limit?: LoginRateLimitConfig;
+	mfa?: JXPMfaConfig;
+	webauthn?: JXPWebAuthnConfig;
 	cache_timeout?: string;
 	query_limits?: JXPQueryLimits;
 	security?: JXPSecurityConfig;

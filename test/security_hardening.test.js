@@ -3,6 +3,7 @@ const chai = require("chai");
 const chaiHttp = require("chai-http");
 const should = chai.should();
 const init = require("./init");
+const security = require("../dist/libs/security");
 
 const model_dir = process.env.MODEL_DIR
 	? path.resolve(process.cwd(), process.env.MODEL_DIR)
@@ -15,14 +16,22 @@ const server = require("../dist/bin/server");
 chai.use(chaiHttp);
 
 describe("security hardening", () => {
+	let apikey = null;
+
 	before(async function () {
 		await init.init();
+		const loginRes = await chai.request(server)
+			.post("/login")
+			.send({ email: init.email, password: init.password });
+		loginRes.should.have.status(200);
+		const record = await security.generateApiKey(loginRes.body.user_id);
+		apikey = record.apikey;
 	});
 
 	it("rejects /call for unlisted static", (done) => {
 		chai.request(server)
 			.post("/call/test/notAllowed")
-			.auth(init.email, init.password)
+			.set("X-API-Key", apikey)
 			.send({})
 			.end((err, res) => {
 				res.should.have.status(403);
@@ -33,7 +42,7 @@ describe("security hardening", () => {
 	it("allows /call for listed static", (done) => {
 		chai.request(server)
 			.post("/call/test/test")
-			.auth(init.email, init.password)
+			.set("X-API-Key", apikey)
 			.send({})
 			.end((err, res) => {
 				res.should.have.status(200);
@@ -44,7 +53,7 @@ describe("security hardening", () => {
 	it("rejects filter with $where", (done) => {
 		chai.request(server)
 			.get('/api/test?filter[$where]=true&limit=10')
-			.auth(init.email, init.password)
+			.set("X-API-Key", apikey)
 			.end((err, res) => {
 				res.should.have.status(400);
 				done();
@@ -54,7 +63,7 @@ describe("security hardening", () => {
 	it("rejects filter with $expr", (done) => {
 		chai.request(server)
 			.get('/api/test?filter[$expr][$eq][0]=$foo&filter[$expr][$eq][1]=bar&limit=10')
-			.auth(init.email, init.password)
+			.set("X-API-Key", apikey)
 			.end((err, res) => {
 				res.should.have.status(400);
 				done();
@@ -64,7 +73,7 @@ describe("security hardening", () => {
 	it("allows $expr in aggregate $match", (done) => {
 		chai.request(server)
 			.post("/aggregate/test")
-			.auth(init.email, init.password)
+			.set("X-API-Key", apikey)
 			.send({
 				query: [
 					{
@@ -90,7 +99,7 @@ describe("security hardening", () => {
 	it("rejects $where in aggregate $match", (done) => {
 		chai.request(server)
 			.post("/aggregate/test")
-			.auth(init.email, init.password)
+			.set("X-API-Key", apikey)
 			.send({
 				query: [{ $match: { $where: "true" } }],
 			})
@@ -106,7 +115,7 @@ describe("security hardening", () => {
 			item.save(() => {
 				chai.request(server)
 					.get("/api/user?limit=10")
-					.auth(init.email, init.password)
+					.set("X-API-Key", apikey)
 					.end((err, res) => {
 						res.should.have.status(200);
 						if (res.body.data.length) {
@@ -131,7 +140,7 @@ describe("security hardening", () => {
 			if (err) return done(err);
 			chai.request(server)
 				.put(`/api/user/${saved._id}?password_override=1`)
-				.auth(init.email, init.password)
+				.set("X-API-Key", apikey)
 				.send({ password: "$2a$04$fakehash" })
 				.end((err2, res) => {
 					res.should.have.status(403);

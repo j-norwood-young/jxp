@@ -1,0 +1,5 @@
+allowBuilds:
+  dtrace-provider: set this to true or false
+minimumReleaseAgeExclude:
+  - jxp-helper@3.0.0
+  - nodemailer@10.0.10

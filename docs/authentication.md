@@ -1,8 +1,7 @@
 # Authentication
 
-There are four ways of authenticating:
+There are three ways of authenticating API requests:
 
-* Basic Auth
 * A Bearer Token
 * An API Key
 * A Javascript Web Token (JWT)
@@ -178,19 +177,7 @@ The provider name (`:provider`) must match a key under `oauth` in your config (e
 
 ## Authenticating API requests
 
-### Basic Auth
-
-Basic auth encodes (NOTE: ***NOT*** encrypts) your username and password and sends it as part of the header. You can use Basic Auth to authenticate yourself at any time.
-
-***WARNING:*** You must only use basic auth over SSL, since it is trivial to decode the username and password. In fact, you should use SSL for everything, anyway.
-
-A basic auth token is created by base64-encoding your username and password, separated by a colon.
-
-Eg. `echo -n "blah@blah.com:password" | base64` would generate a basic auth token on the command line.
-
-However, `echo "YmxhaEBibGFoLmNvbTpwYXNzd29yZA==" | base64 --decode` would reveal the username and password, which is why it's not safe to use it on an unencrypted connection.
-
-Header: `Authorization: Basic <your basic token>`
+HTTP Basic Auth (`Authorization: Basic …`) is not supported. It only base64-encodes the password and is too easy to leak or replay. Use a bearer token or an API key instead.
 
 ### Bearer Token
 
@@ -214,7 +201,7 @@ API keys in query parameters are rejected. This prevents credentials from leakin
 
 Clients build their own enrollment and login UI. JXP exposes REST endpoints only.
 
-Interactive password login (`POST /login` and docs `POST /docs/session`) requires a second factor when the user has TOTP enabled. Passkeys are passwordless only (see below) and are not offered as MFA after password. **API keys and Basic Auth do not go through the MFA challenge** (machine credentials).
+Interactive password login (`POST /login` and docs `POST /docs/session`) requires a second factor when the user has TOTP enabled. Passkeys are passwordless only (see below) and are not offered as MFA after password. **API keys do not go through the MFA challenge** (machine credentials).
 
 The docs browser includes Account → Settings for password change, TOTP, and passkeys (uses the ephemeral console API key), plus a **Login with Passkey** button on the sign-in page.
 

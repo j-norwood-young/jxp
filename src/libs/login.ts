@@ -213,13 +213,8 @@ const oauth_callback = async (req, res) => {
 
 const login = async (req, res) => {
 	const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-	let email = req.params.email || req.body.email;
-	let password = req.params.password || req.body.password;
-	const userpass = security.basicAuthData(req);
-	if (userpass) {
-		email = userpass[0];
-		password = userpass[1];
-	}
+	const email = req.params.email || req.body.email;
+	const password = req.params.password || req.body.password;
 	if (!password || !email) {
 		console.error(new Date(), "Missing email or password parameters");
 		throw new errors.ForbiddenError("Missing email or password parameters");

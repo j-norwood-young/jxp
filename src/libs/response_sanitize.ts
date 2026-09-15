@@ -5,6 +5,9 @@ const DEFAULT_STRIP_FIELDS = [
 	"access_token",
 	"refresh_token",
 	"apikey",
+	"totp_secret_enc",
+	"totp_pending_secret_enc",
+	"totp_backup_hashes",
 ];
 
 function stripFromObject(obj: Record<string, unknown>, fields: Set<string>): void {

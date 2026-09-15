@@ -443,6 +443,8 @@ export const PRIMARY_AUTH_MODEL_NAMES = new Set([
 	"Token",
 	"RefreshToken",
 	"Usergroup",
+	"WebAuthnCredential",
+	"AuthChallenge",
 ]);
 
 export function isPrimaryAuthModel(model: Model<unknown>): boolean {

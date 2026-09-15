@@ -30,23 +30,11 @@ const init = function (models, config) {
 	if (config.url) provider = config.url;
 };
 
-const basicAuthData = function (req) {
-	if (!req.headers.authorization) {
-		return false;
-	}
-	try {
-		const authorization = req.headers.authorization.split(" ")[1];
-		const decoded = Buffer.from(authorization, "base64").toString();
-		return decoded.split(":");
-	} catch (err) {
-		return false;
-	}
-};
-
+/** Verify email + password credentials (login / docs / WS). Not HTTP Basic Auth. */
 const basicAuth = async ba => {
 	try {
 		if (!Array.isArray(ba) || ba.length !== 2) {
-			throw ("Basic Auth incorrectly formatted");
+			throw ("Credentials incorrectly formatted");
 		}
 		var email = ba[0];
 		var password = ba[1];
@@ -293,8 +281,10 @@ const authenticate = async req => {
 	}
 	let apikeyRecord = null;
 	if (req.headers.authorization && req.headers.authorization.trim().toLowerCase().indexOf("basic") === 0) {
-		// Basic Auth
-		user = await basicAuth(basicAuthData(req));
+		throw new errors.UnauthorizedError(
+			"Basic Auth is no longer supported because credentials are only base64-encoded and leak easily. " +
+			"Use Authorization: Bearer <token> or the X-API-Key header."
+		);
 	} else if (req.headers.authorization && req.headers.authorization.trim().toLowerCase().indexOf("bearer") === 0) {
 		// Token Auth
 		user = await bearerAuth(bearerAuthData(req));
@@ -444,7 +434,6 @@ const effectiveAdmin = (res) => Boolean(res.user?.admin && res.apikey?.allow_adm
 
 const Security = {
 	init,
-	basicAuthData,
 	basicAuth,
 	encPassword,
 	generateApiKey,

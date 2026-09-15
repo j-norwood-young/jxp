@@ -70,6 +70,10 @@ const empty_user_collections = async () => {
 		await empty(User);
 		await empty(Apikey);
 		await empty(Test);
+		const WebAuthnCredential = loadModel(path.join(model_dir, "webauthncredential_model"));
+		const AuthChallenge = loadModel(path.join(model_dir, "authchallenge_model"));
+		await empty(WebAuthnCredential);
+		await empty(AuthChallenge);
 	} catch (err) {
 		console.error(err);
 		throw err;

@@ -10,6 +10,10 @@ export interface IUser {
 	password?: string;
 	admin?: boolean;
 	temp_hash?: string;
+	totp_enabled?: boolean;
+	totp_secret_enc?: string;
+	totp_pending_secret_enc?: string;
+	totp_backup_hashes?: string[];
 	createdAt?: Date;
 	updatedAt?: Date;
 }
@@ -27,6 +31,10 @@ const UserSchema = new JXPSchema(
 		password: String,
 		admin: Boolean,
 		temp_hash: String,
+		totp_enabled: { type: Boolean, default: false },
+		totp_secret_enc: String,
+		totp_pending_secret_enc: String,
+		totp_backup_hashes: { type: [String], default: undefined },
 	},
 	{
 		perms: {

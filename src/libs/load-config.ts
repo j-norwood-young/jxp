@@ -150,7 +150,17 @@ export function loadJxpConfig(overrides: Partial<JXPConfig> = {}): JXPConfig {
 		security: {
 			strip_fields: process.env.SECURITY_STRIP_FIELDS
 				? process.env.SECURITY_STRIP_FIELDS.split(",").map((s) => s.trim())
-				: ["password", "temp_hash", "key_hash", "access_token", "refresh_token", "apikey"],
+				: [
+						"password",
+						"temp_hash",
+						"key_hash",
+						"access_token",
+						"refresh_token",
+						"apikey",
+						"totp_secret_enc",
+						"totp_pending_secret_enc",
+						"totp_backup_hashes",
+					],
 		},
 		docs: {
 			access: parseDocsAccess(process.env.DOCS_ACCESS),
@@ -161,6 +171,17 @@ export function loadJxpConfig(overrides: Partial<JXPConfig> = {}): JXPConfig {
 			burst: envInt("LOGIN_RATE_BURST", 8),
 			per_minute: envInt("LOGIN_RATE_PER_MINUTE", 12),
 			xff: envBool("LOGIN_RATE_LIMIT_XFF"),
+		},
+		mfa: {
+			totp_issuer: process.env.MFA_TOTP_ISSUER || "JXP",
+			challenge_ttl: process.env.MFA_CHALLENGE_TTL || "5m",
+		},
+		webauthn: {
+			rp_name: process.env.WEBAUTHN_RP_NAME || "JXP",
+			rp_id: process.env.WEBAUTHN_RP_ID || undefined,
+			origins: process.env.WEBAUTHN_ORIGINS
+				? process.env.WEBAUTHN_ORIGINS.split(",").map((s) => s.trim())
+				: undefined,
 		},
 		cors: {
 			origins: process.env.CORS_ORIGINS
