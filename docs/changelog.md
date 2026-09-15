@@ -8,11 +8,18 @@ Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 
 - **Startup index alignment** — on boot, fully sync indexes for primary auth models (`User`, `APIKey`, `Token`, `RefreshToken`, `Usergroup`) so stale unique indexes (e.g. legacy one-key-per-user on `apikeys`) cannot block login; warn about missing indexes on other models. Disable with `index_diagnostics.ensure_primary_on_startup: false`. See [Index diagnostics](index_diagnostics.md#startup-primary-auth-models).
 - **Docs branding** — favicon and brand mark use the JXP logo (`/docs/assets/jxp-logo.svg`).
+- **Docs re-auth modal** — when the ephemeral docs console API key is missing, revoked, or expired while a session cookie remains, the docs UI prompts for login again via a modal instead of appearing signed in with a dead key.
+- **Concurrent docs sessions** — logging in from a second browser no longer revokes the first browser’s Docs console key; each login gets its own ephemeral key (re-login in the same browser still replaces that browser’s prior key).
+
+### Fixed
+
+- **Index sync** — removed duplicate same-key indexes on `Token`, `RefreshToken`, and `IndexQueryLog` (field `index: true` plus TTL/unique `schema.index`). Those duplicates made `syncIndexes` fail with “equivalent index already exists… different options” while the diagnostics UI still reported success. The diagnostics Sync button now shows per-model created/dropped/errors next to the control.
 
 ### Changed
 
 - **Docs UI** — full-bleed graphite/amber landing; dark-mode polish across docs templates; guests see Documentation + Login, not API explorer chrome.
 - **Docs sidebar** — guests see Guides only; Operations and API appear after login.
+- **Docs session** — `GET /docs/session` and protected docs middleware require the linked console API key to still be active; otherwise the session cookie is cleared.
 
 ---
 

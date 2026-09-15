@@ -987,6 +987,29 @@ a:hover {
 	color: #0c0d10;
 }
 
+.docs-reauth-modal-content {
+	background: var(--docs-bg-elevated);
+	border: 1px solid var(--docs-border);
+	color: var(--docs-text);
+}
+
+.docs-reauth-modal-content .form-control {
+	background: var(--docs-bg-panel);
+	border-color: var(--docs-border);
+	color: var(--docs-text);
+}
+
+.docs-reauth-modal-content .form-control:focus {
+	background: var(--docs-bg);
+	border-color: var(--docs-accent);
+	box-shadow: 0 0 0 0.2rem var(--docs-accent-soft);
+	color: var(--docs-text);
+}
+
+.docs-reauth-modal-content .form-label {
+	color: var(--docs-text-muted);
+}
+
 .mcp-chat-wrap {
 	border: 1px solid var(--docs-border);
 	border-radius: 0.5rem;

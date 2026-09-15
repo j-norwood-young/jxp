@@ -188,5 +188,92 @@ describe("docs_auth", () => {
 					done();
 				});
 		});
+
+		it("returns console_key_id from session and invalidates when the key is revoked", (done) => {
+			const agent = chai.request.agent(server);
+			const apikeys = require("../dist/libs/apikeys");
+			agent
+				.post("/docs/session")
+				.send({ email: init.email, password: init.password })
+				.end((err, loginRes) => {
+					if (err) return done(err);
+					loginRes.should.have.status(200);
+					loginRes.body.should.have.property("console_key_id");
+					const keyId = loginRes.body.console_key_id;
+					agent
+						.get("/docs/session")
+						.end(async (err2, sess) => {
+							try {
+								if (err2) return done(err2);
+								sess.should.have.status(200);
+								sess.body.should.have.property("authenticated", true);
+								sess.body.should.have.property("console_key_id", keyId);
+
+								const cookieHeader = loginRes.headers["set-cookie"];
+								should.exist(cookieHeader);
+								const raw = [].concat(cookieHeader).find((c) =>
+									c.startsWith(`${DOCS_SESSION_COOKIE}=`),
+								);
+								const token = decodeURIComponent(raw.split("=")[1].split(";")[0]);
+								const payload = jwt.verify(
+									token,
+									process.env.SHARED_SECRET || "change-me",
+								);
+								await apikeys.revokeApiKey(payload.user_id, keyId);
+
+								agent
+									.get("/docs/session")
+									.end((err3, dead) => {
+										if (err3) return done(err3);
+										dead.should.have.status(401);
+										done();
+									});
+							} catch (e) {
+								done(e);
+							}
+						});
+				});
+		});
+
+		it("allows concurrent docs sessions in separate browsers", (done) => {
+			const browserA = chai.request.agent(server);
+			const browserB = chai.request.agent(server);
+			browserA
+				.post("/docs/session")
+				.send({ email: init.email, password: init.password })
+				.end((err, loginA) => {
+					if (err) return done(err);
+					loginA.should.have.status(200);
+					const keyA = loginA.body.console_key_id;
+					browserB
+						.post("/docs/session")
+						.send({ email: init.email, password: init.password })
+						.end((err2, loginB) => {
+							if (err2) return done(err2);
+							loginB.should.have.status(200);
+							loginB.body.console_key_id.should.not.equal(keyA);
+							browserA
+								.get("/docs/session")
+								.end((err3, sessA) => {
+									if (err3) return done(err3);
+									sessA.should.have.status(200);
+									sessA.body.should.have.property("authenticated", true);
+									sessA.body.should.have.property("console_key_id", keyA);
+									browserB
+										.get("/docs/session")
+										.end((err4, sessB) => {
+											if (err4) return done(err4);
+											sessB.should.have.status(200);
+											sessB.body.should.have.property("authenticated", true);
+											sessB.body.should.have.property(
+												"console_key_id",
+												loginB.body.console_key_id,
+											);
+											done();
+										});
+								});
+						});
+				});
+		});
 	});
 });

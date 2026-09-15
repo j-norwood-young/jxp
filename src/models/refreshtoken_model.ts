@@ -16,9 +16,12 @@ const RefreshTokenSchema = new JXPSchema(
 	{
 		user_id: { type: global.ObjectId, index: true },
 		refresh_token: { type: String, index: true },
-		refresh_token_hash: { type: String, index: true },
+		// Unique/sparse index declared below — do not also set index: true here
+		// (duplicate same-key indexes block syncIndexes with option-mismatch errors).
+		refresh_token_hash: { type: String },
 		expires_in: { type: Number, default: getRefreshTokenExpiry() },
-		expire_at: { type: Date, default: () => new Date(Date.now() + getRefreshTokenExpiry() * 1000), index: true },
+		// TTL index declared below — do not also set index: true here.
+		expire_at: { type: Date, default: () => new Date(Date.now() + getRefreshTokenExpiry() * 1000) },
 	},
 	{
 		perms: {

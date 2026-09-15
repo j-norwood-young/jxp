@@ -257,14 +257,19 @@
 	}
 
 	async function loadSessionApiKey() {
+		if (window.jxpDocsAuth && window.jxpDocsAuth.loadSessionApiKey) {
+			await window.jxpDocsAuth.loadSessionApiKey();
+			updateMcpConfigSnippets();
+			return;
+		}
 		const access = document.documentElement.dataset.docsAccess;
 		if (access !== "protected") return;
-			const sessionKey = sessionStorage.getItem("jxp_docs_console_key");
-			if (sessionKey) {
-				const input = document.getElementById("docs-api-key");
-				if (input) input.value = sessionKey;
-				return;
-			}
+		const sessionKey = sessionStorage.getItem("jxp_docs_console_key");
+		if (sessionKey) {
+			const input = document.getElementById("docs-api-key");
+			if (input) input.value = sessionKey;
+			return;
+		}
 		try {
 			const res = await fetch("/docs/session", { credentials: "same-origin" });
 			if (!res.ok) return;

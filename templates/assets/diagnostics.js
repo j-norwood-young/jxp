@@ -33,8 +33,12 @@
 		return headers;
 	}
 
-	/** Same as api-console.js: docs login stores apikey in HttpOnly cookie; expose via /docs/session */
+	/** Prefer shared docs auth (api-console.js); falls back for standalone use. */
 	async function loadSessionApiKey() {
+		if (window.jxpDocsAuth && window.jxpDocsAuth.loadSessionApiKey) {
+			await window.jxpDocsAuth.loadSessionApiKey();
+			return;
+		}
 		const access = document.documentElement.dataset.docsAccess;
 		if (access !== "protected") return;
 		const sessionKey = sessionStorage.getItem("jxp_docs_console_key");
@@ -288,24 +292,77 @@
 
 	async function syncIndexes() {
 		const confirmInput = document.getElementById("diag-sync-confirm");
-		const status = document.getElementById("diag-indexes-status");
+		const status = document.getElementById("diag-sync-status");
+		const resultsEl = document.getElementById("diag-sync-results");
+		const btn = document.getElementById("diag-sync-btn");
+		if (!status) return;
 		if (confirmInput.value.trim() !== SYNC_CONFIRM) {
+			status.className = "small mt-2 text-warning";
 			status.textContent = `Type ${SYNC_CONFIRM} to confirm sync.`;
 			return;
 		}
+		status.className = "small mt-2 text-muted";
 		status.textContent = "Syncing…";
+		if (resultsEl) resultsEl.innerHTML = "";
+		if (btn) btn.disabled = true;
 		try {
-			await apiFetch("/diagnostics/indexes/sync", {
+			const results = await apiFetch("/diagnostics/indexes/sync", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ confirm: SYNC_CONFIRM }),
 			});
-			status.textContent = "Sync complete. Refreshing audit…";
 			confirmInput.value = "";
+			renderSyncResults(results, status, resultsEl);
 			await loadIndexes(true);
 		} catch (err) {
+			status.className = "small mt-2 text-danger";
 			status.textContent = `Sync failed: ${err.message}`;
+		} finally {
+			if (btn) btn.disabled = confirmInput.value.trim() !== SYNC_CONFIRM;
 		}
+	}
+
+	function renderSyncResults(results, status, resultsEl) {
+		const rows = Array.isArray(results) ? results : [];
+		const errors = rows.filter((r) => r && r.error);
+		const changed = rows.filter(
+			(r) => r && !r.error && ((r.created && r.created.length) || (r.dropped && r.dropped.length))
+		);
+		const unchanged = rows.length - errors.length - changed.length;
+
+		if (errors.length) {
+			status.className = "small mt-2 text-danger";
+			status.textContent = `Sync finished with ${errors.length} error(s), ${changed.length} changed, ${unchanged} already aligned.`;
+		} else if (changed.length) {
+			status.className = "small mt-2 text-success";
+			status.textContent = `Sync complete: ${changed.length} collection(s) updated, ${unchanged} already aligned.`;
+		} else {
+			status.className = "small mt-2 text-success";
+			status.textContent = `Sync complete: all ${rows.length || 0} collection(s) already aligned.`;
+		}
+
+		if (!resultsEl) return;
+		if (!rows.length) {
+			resultsEl.innerHTML = "";
+			return;
+		}
+
+		const details = rows
+			.filter((r) => r.error || (r.created && r.created.length) || (r.dropped && r.dropped.length))
+			.map((r) => {
+				if (r.error) {
+					return `<li class="text-danger"><code>${escapeHtml(r.modelName)}</code>: ${escapeHtml(r.error)}</li>`;
+				}
+				const parts = [];
+				if (r.created && r.created.length) parts.push(`created ${r.created.length}`);
+				if (r.dropped && r.dropped.length) parts.push(`dropped ${r.dropped.length}`);
+				return `<li class="text-success"><code>${escapeHtml(r.modelName)}</code>: ${escapeHtml(parts.join(", "))}</li>`;
+			})
+			.join("");
+
+		resultsEl.innerHTML = details
+			? `<ul class="small mb-0 ps-3">${details}</ul>`
+			: `<p class="small text-muted mb-0">No index changes were required.</p>`;
 	}
 
 	function wireModelFilter() {

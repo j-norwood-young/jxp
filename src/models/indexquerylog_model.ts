@@ -30,7 +30,9 @@ const IndexQueryLogSchema = new JXPSchema(
 		n_returned: Number,
 		total_keys_examined: Number,
 		millis: Number,
-		observed_at: { type: Date, default: Date.now, index: true },
+		// TTL index declared below — do not also set index: true here
+		// (duplicate same-key indexes block syncIndexes with option-mismatch errors).
+		observed_at: { type: Date, default: Date.now },
 	},
 	{
 		internal: true,

@@ -12,7 +12,9 @@ alwaysApply: false
 | `disabled` | same | model explorer → 404 |
 | `public` | all | none |
 
-Sign-in page (`/docs/login`) calls `POST /docs/session` with email/password and receives an HttpOnly session cookie plus a short-lived console key. The console key is kept in sessionStorage and revoked on logout. The session endpoint uses login rate limiting (`login_rate_limit.ts`); handle HTTP 429 in `docs-login.js`.
+Sign-in page (`/docs/login`) calls `POST /docs/session` with email/password and receives an HttpOnly session cookie plus a short-lived console key. The console key is kept in sessionStorage (with `console_key_id`) and revoked on logout. Each browser login gets its own console key (concurrent sessions are allowed); re-login in the same browser only revokes that browser’s prior key. The session endpoint uses login rate limiting (`login_rate_limit.ts`); handle HTTP 429 in `docs-login.js`.
+
+If the ephemeral console key is missing from sessionStorage or revoked/expired on the server while a docs cookie remains, `api-console.js` must show the `#docs-reauth-modal` login challenge (not silently stay “signed in” with an empty key). `GET /docs/session` and docs middleware validate `console_key_id` via `resolveValidDocsSession` and clear the cookie when the key is gone.
 
 ## Restify
 

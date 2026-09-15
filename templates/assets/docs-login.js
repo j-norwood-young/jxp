@@ -43,6 +43,12 @@
 				}
 				if (sessionBody.console_key) {
 					sessionStorage.setItem("jxp_docs_console_key", sessionBody.console_key);
+					if (sessionBody.console_key_id) {
+						sessionStorage.setItem(
+							"jxp_docs_console_key_id",
+							sessionBody.console_key_id,
+						);
+					}
 				}
 
 				window.location.href = next;

@@ -84,6 +84,28 @@ export function verifyDocsSession(req: JXPRequest): DocsSessionPayload | null {
 	}
 }
 
+async function consoleKeyStillActive(session: DocsSessionPayload): Promise<boolean> {
+	if (!session.console_key_id) return false;
+	const apikeys = require("./apikeys");
+	const record = await apikeys.findActiveApiKeyById(session.user_id, session.console_key_id);
+	return Boolean(record);
+}
+
+/**
+ * JWT session plus live ephemeral "Docs console" API key.
+ * Clears the cookie when the key was revoked or expired.
+ */
+export async function resolveValidDocsSession(
+	req: JXPRequest,
+	res?: JXPResponse,
+): Promise<DocsSessionPayload | null> {
+	const session = verifyDocsSession(req);
+	if (!session) return null;
+	if (await consoleKeyStillActive(session)) return session;
+	if (res) clearSessionCookie(res);
+	return null;
+}
+
 function signDocsSession(payload: DocsSessionPayload): string {
 	if (!sharedSecret) throw new Error("SHARED_SECRET is required for docs session");
 	return jwt.sign(payload, sharedSecret, { expiresIn: SESSION_MAX_AGE_SEC });
@@ -162,17 +184,21 @@ export function docsAccessMiddleware(req: JXPRequest, res: JXPResponse, next: Ne
 	if (access === "disabled") {
 		return next(new errors.NotFoundError("Not found"));
 	}
-	const session = verifyDocsSession(req);
-	if (!session) {
-		if (req.method === "GET") {
-			const nextUrl = encodeURIComponent(pathname);
-			res.redirect(302, `/docs/login?next=${nextUrl}`, next);
-			return;
-		}
-		return next(new errors.UnauthorizedError("Docs login required"));
-	}
-	(req as JXPRequest & { docsSession?: DocsSessionPayload }).docsSession = session;
-	return next();
+	resolveValidDocsSession(req, res)
+		.then((session) => {
+			if (!session) {
+				if (req.method === "GET") {
+					const nextUrl = encodeURIComponent(pathname);
+					res.redirect(302, `/docs/login?next=${nextUrl}`, next);
+					return;
+				}
+				next(new errors.UnauthorizedError("Docs login required"));
+				return;
+			}
+			(req as JXPRequest & { docsSession?: DocsSessionPayload }).docsSession = session;
+			next();
+		})
+		.catch((err) => next(err));
 }
 
 export async function loginPage(
@@ -188,7 +214,7 @@ export async function loginPage(
 		sendRedirect(res, "/docs/api");
 		return;
 	}
-	const session = verifyDocsSession(req);
+	const session = await resolveValidDocsSession(req, res);
 	if (session) {
 		const nextPath = safeNextPath(req.query.next);
 		sendRedirect(res, nextPath);
@@ -231,19 +257,30 @@ export async function establishSession(req: JXPRequest, res: JXPResponse): Promi
 	} catch {
 		throw new errors.UnauthorizedError("Incorrect email or password");
 	}
-	await apikeys.revokeNamedForUser(user._id, "Docs console");
+	// Revoke only this browser's previous console key (if any). Other browsers
+	// keep their own Docs console sessions.
+	const prior = verifyDocsSession(req);
+	if (prior?.console_key_id && prior.user_id === String(user._id)) {
+		await apikeys.revokeApiKey(user._id, prior.console_key_id);
+	}
 	const consoleKey = await apikeys.createApiKey(user._id, {
 		name: "Docs console",
 		expires_at: new Date(Date.now() + SESSION_MAX_AGE_SEC * 1000),
 	});
+	const consoleKeyId = String(consoleKey.record._id);
 	const token = signDocsSession({
 		user_id: String(user._id),
 		email: user.email,
-		console_key_id: String(consoleKey.record._id),
+		console_key_id: consoleKeyId,
 	});
 	const csrf = crypto.randomBytes(24).toString("base64url");
 	setSessionCookie(res, token, csrf);
-	res.send({ ok: true, console_key: consoleKey.plaintext, csrf_token: csrf });
+	res.send({
+		ok: true,
+		console_key: consoleKey.plaintext,
+		console_key_id: consoleKeyId,
+		csrf_token: csrf,
+	});
 }
 
 export async function getSession(req: JXPRequest, res: JXPResponse): Promise<void> {
@@ -252,11 +289,15 @@ export async function getSession(req: JXPRequest, res: JXPResponse): Promise<voi
 		res.send({ authenticated: false });
 		return;
 	}
-	const docsSession = verifyDocsSession(req);
+	const docsSession = await resolveValidDocsSession(req, res);
 	if (!docsSession) {
 		throw new errors.UnauthorizedError("Not authenticated");
 	}
-	res.send({ authenticated: true, email: docsSession.email });
+	res.send({
+		authenticated: true,
+		email: docsSession.email,
+		console_key_id: docsSession.console_key_id,
+	});
 }
 
 export async function logout(req: JXPRequest, res: JXPResponse): Promise<void> {
@@ -270,8 +311,8 @@ export async function logout(req: JXPRequest, res: JXPResponse): Promise<void> {
 	sendRedirect(res, "/");
 }
 
-function sessionUser(req: JXPRequest): DocsSessionPayload {
-	const session = verifyDocsSession(req);
+async function sessionUser(req: JXPRequest, res: JXPResponse): Promise<DocsSessionPayload> {
+	const session = await resolveValidDocsSession(req, res);
 	if (!session) throw new errors.UnauthorizedError("Not authenticated");
 	return session;
 }
@@ -284,7 +325,7 @@ function publicKey(record: Record<string, unknown>): Record<string, unknown> {
 }
 
 export async function listAccountKeys(req: JXPRequest, res: JXPResponse): Promise<void> {
-	const session = sessionUser(req);
+	const session = await sessionUser(req, res);
 	const apikeys = require("./apikeys");
 	const records = await apikeys.listApiKeys(session.user_id);
 	res.send(records.map((record) => publicKey(record.toObject ? record.toObject() : record)));
@@ -292,7 +333,7 @@ export async function listAccountKeys(req: JXPRequest, res: JXPResponse): Promis
 
 export async function createAccountKey(req: JXPRequest, res: JXPResponse): Promise<void> {
 	requireCsrf(req);
-	const session = sessionUser(req);
+	const session = await sessionUser(req, res);
 	const apikeys = require("./apikeys");
 	const body = req.body || {};
 	const scopes = body.scopes;
@@ -320,7 +361,7 @@ export async function createAccountKey(req: JXPRequest, res: JXPResponse): Promi
 
 export async function revokeAccountKey(req: JXPRequest, res: JXPResponse): Promise<void> {
 	requireCsrf(req);
-	const session = sessionUser(req);
+	const session = await sessionUser(req, res);
 	const apikeys = require("./apikeys");
 	await apikeys.revokeApiKey(session.user_id, req.params.id);
 	res.send({ ok: true });

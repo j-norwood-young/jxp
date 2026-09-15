@@ -23,6 +23,39 @@ html(lang="en" data-bs-theme="dark" data-docs-access=docs_access)
         include sidebar
         main.docs-main
           block content
+    if docs_access === 'protected'
+      #docs-reauth-modal.modal.fade(tabindex="-1" aria-labelledby="docs-reauth-title" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false")
+        .modal-dialog.modal-dialog-centered
+          .modal-content.docs-reauth-modal-content
+            .modal-header.border-secondary
+              h2#docs-reauth-title.h5.modal-title Session expired
+              //- no dismiss — must sign in again
+            .modal-body
+              p.text-muted.small.mb-3
+                | Your docs console API key is no longer available. Sign in again to continue.
+              #docs-reauth-error.alert.alert-danger(role="alert" hidden)
+              form#docs-reauth-form
+                .mb-3
+                  label.form-label(for="docs-reauth-email") Email
+                  input#docs-reauth-email.form-control(
+                    type="email"
+                    name="email"
+                    value=docs_user_email
+                    required
+                    autocomplete="username"
+                  )
+                .mb-3
+                  label.form-label(for="docs-reauth-password") Password
+                  input#docs-reauth-password.form-control(
+                    type="password"
+                    name="password"
+                    required
+                    autocomplete="current-password"
+                  )
+                button.btn.docs-btn-primary.w-100(type="submit") Sign in
+            .modal-footer.border-secondary.justify-content-between
+              a.small.text-muted(href="/") Back to home
+              a.small.text-muted(href="/docs/md/api.md") Read guides
     script(src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous")
     script(src=`/docs/assets/api-console.js?v=${version}` defer)
     block javascripts

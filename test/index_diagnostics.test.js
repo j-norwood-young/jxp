@@ -23,6 +23,8 @@ function mockModel({
 	toCreate = [],
 	toDrop = [],
 	syncError = null,
+	/** When true, diffIndexes keeps reporting drift after syncIndexes (option mismatch). */
+	stuckDrift = false,
 }) {
 	let syncCalled = false;
 	const model = {
@@ -30,7 +32,12 @@ function mockModel({
 		collection: { name: collectionName || `${modelName.toLowerCase()}s` },
 		schema: { indexes: () => [] },
 		listIndexes: async () => [{ name: "_id_", key: { _id: 1 } }],
-		diffIndexes: async () => ({ toCreate, toDrop }),
+		diffIndexes: async () => {
+			if (syncCalled && !stuckDrift) {
+				return { toCreate: [], toDrop: [] };
+			}
+			return { toCreate, toDrop };
+		},
 		syncIndexes: async () => {
 			syncCalled = true;
 			if (syncError) throw syncError;
@@ -136,6 +143,32 @@ describe("index_diagnostics", () => {
 		} catch (err) {
 			expect(err.message).to.include(SYNC_CONFIRM_PHRASE);
 		}
+	});
+
+	it("syncAllModels creates and drops when confirm matches", async () => {
+		const { model, wasSyncCalled } = mockModel({
+			modelName: "Token",
+			toCreate: [{ expire_at: 1 }],
+			toDrop: ["expire_at_1"],
+		});
+		const results = await syncAllModels({ token: model }, { confirm: SYNC_CONFIRM_PHRASE });
+		expect(wasSyncCalled()).to.be.true;
+		expect(results).to.have.length(1);
+		expect(results[0].modelName).to.eql("Token");
+		expect(results[0].created).to.eql([JSON.stringify({ expire_at: 1 })]);
+		expect(results[0].dropped).to.eql(["expire_at_1"]);
+		expect(results[0].error).to.be.undefined;
+	});
+
+	it("syncAllModels reports error when drift remains after sync", async () => {
+		const { model } = mockModel({
+			modelName: "Token",
+			toCreate: [{ expire_at: 1 }],
+			toDrop: [],
+			stuckDrift: true,
+		});
+		const results = await syncAllModels({ token: model }, { confirm: SYNC_CONFIRM_PHRASE });
+		expect(results[0].error).to.include("Index drift remains");
 	});
 
 	it("identifies primary auth models", () => {

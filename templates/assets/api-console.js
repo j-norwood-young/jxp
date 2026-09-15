@@ -3,10 +3,37 @@
 
 	const STORAGE_KEY = "jxp_docs_api_key";
 	const STORAGE_REMEMBER = "jxp_docs_remember_key";
+	const CONSOLE_KEY = "jxp_docs_console_key";
+	const CONSOLE_KEY_ID = "jxp_docs_console_key_id";
+
+	let reauthModal = null;
+	let reauthBound = false;
+	let sessionLoadPromise = null;
 
 	function getApiKey() {
 		const input = document.getElementById("docs-api-key");
 		return input ? input.value.trim() : "";
+	}
+
+	function setApiKeyInput(value) {
+		const input = document.getElementById("docs-api-key");
+		if (input) {
+			input.value = value || "";
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+		}
+	}
+
+	function storeConsoleKey(key, keyId) {
+		if (key) sessionStorage.setItem(CONSOLE_KEY, key);
+		else sessionStorage.removeItem(CONSOLE_KEY);
+		if (keyId) sessionStorage.setItem(CONSOLE_KEY_ID, keyId);
+		else sessionStorage.removeItem(CONSOLE_KEY_ID);
+	}
+
+	function clearConsoleKey() {
+		sessionStorage.removeItem(CONSOLE_KEY);
+		sessionStorage.removeItem(CONSOLE_KEY_ID);
+		setApiKeyInput("");
 	}
 
 	function loadStoredKey() {
@@ -91,6 +118,10 @@
 			responseEl.textContent = formatResponse(text);
 			metaEl.textContent = `HTTP ${res.status} ${res.statusText} · ${elapsed} ms`;
 			metaEl.className = "api-response-meta " + (res.ok ? "text-success" : "text-danger");
+			if (res.status === 401 && document.documentElement.dataset.docsAccess === "protected") {
+				clearConsoleKey();
+				showReauthModal("Your API key was rejected. Sign in again to continue.");
+			}
 		} catch (err) {
 			responseEl.textContent = String(err.message || err);
 			metaEl.textContent = "Request failed";
@@ -116,24 +147,138 @@
 		}
 	}
 
-	async function loadSessionApiKey() {
-		const access = document.documentElement.dataset.docsAccess;
-		if (access !== "protected") return;
-		const sessionKey = sessionStorage.getItem("jxp_docs_console_key");
-		if (sessionKey) {
-			const input = document.getElementById("docs-api-key");
-			if (input) input.value = sessionKey;
-			return;
-		}
-		try {
-			const res = await fetch("/docs/session", { credentials: "same-origin" });
-			if (!res.ok) return;
-			const data = await res.json();
-			if (!data.authenticated) return;
-		} catch {
-			/* ignore */
-		}
+	function getReauthModal() {
+		const el = document.getElementById("docs-reauth-modal");
+		if (!el || typeof bootstrap === "undefined" || !bootstrap.Modal) return null;
+		if (!reauthModal) reauthModal = bootstrap.Modal.getOrCreateInstance(el);
+		return reauthModal;
 	}
+
+	function showReauthModal(message) {
+		const errEl = document.getElementById("docs-reauth-error");
+		if (errEl) {
+			if (message) {
+				errEl.textContent = message;
+				errEl.hidden = false;
+			} else {
+				errEl.hidden = true;
+				errEl.textContent = "";
+			}
+		}
+		const modal = getReauthModal();
+		if (modal) modal.show();
+	}
+
+	function hideReauthModal() {
+		const modal = getReauthModal();
+		if (modal) modal.hide();
+	}
+
+	function bindReauthForm() {
+		if (reauthBound) return;
+		const form = document.getElementById("docs-reauth-form");
+		const errEl = document.getElementById("docs-reauth-error");
+		if (!form || !errEl) return;
+		reauthBound = true;
+		form.addEventListener("submit", async function (e) {
+			e.preventDefault();
+			errEl.hidden = true;
+			const email = form.email.value.trim();
+			const password = form.password.value;
+			try {
+				const sessRes = await fetch("/docs/session", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Accept: "application/json",
+					},
+					credentials: "same-origin",
+					body: JSON.stringify({ email, password }),
+				});
+				const sessionBody = await sessRes.json().catch(function () {
+					return {};
+				});
+				if (sessRes.status === 429) {
+					errEl.textContent =
+						"Too many login attempts. Please wait a minute and try again.";
+					errEl.hidden = false;
+					return;
+				}
+				if (!sessRes.ok || !sessionBody.ok) {
+					errEl.textContent =
+						sessionBody.message || "Incorrect email or password";
+					errEl.hidden = false;
+					return;
+				}
+				storeConsoleKey(sessionBody.console_key, sessionBody.console_key_id);
+				setApiKeyInput(sessionBody.console_key || "");
+				form.password.value = "";
+				sessionLoadPromise = Promise.resolve();
+				hideReauthModal();
+			} catch {
+				errEl.textContent = "Login request failed";
+				errEl.hidden = false;
+			}
+		});
+	}
+
+	/**
+	 * Restore the ephemeral console key, or challenge for login when the
+	 * session cookie outlives the key (revoked, expired, or cleared storage).
+	 */
+	function loadSessionApiKey() {
+		if (sessionLoadPromise) return sessionLoadPromise;
+		sessionLoadPromise = (async function () {
+			const access = document.documentElement.dataset.docsAccess;
+			if (access !== "protected") return;
+			bindReauthForm();
+
+			const sessionKey = sessionStorage.getItem(CONSOLE_KEY);
+			const storedKeyId = sessionStorage.getItem(CONSOLE_KEY_ID);
+			const looksAuthenticated = Boolean(
+				document.querySelector('form[action="/docs/logout"]'),
+			);
+
+			let session = null;
+			try {
+				const res = await fetch("/docs/session", { credentials: "same-origin" });
+				if (res.ok) {
+					session = await res.json();
+				}
+			} catch {
+				/* ignore network errors */
+			}
+
+			if (!session || !session.authenticated) {
+				clearConsoleKey();
+				if (looksAuthenticated) {
+					showReauthModal("Your docs session is no longer valid. Sign in again.");
+				}
+				return;
+			}
+
+			if (sessionKey && storedKeyId && storedKeyId === session.console_key_id) {
+				setApiKeyInput(sessionKey);
+				return;
+			}
+
+			// Cookie is valid but plaintext console key is missing or stale.
+			clearConsoleKey();
+			showReauthModal();
+		})();
+		return sessionLoadPromise;
+	}
+
+	// Expose for MCP / diagnostics pages that also need the console key.
+	window.jxpDocsAuth = {
+		loadSessionApiKey: loadSessionApiKey,
+		showReauthModal: showReauthModal,
+		clearConsoleKey: clearConsoleKey,
+		storeConsoleKey: storeConsoleKey,
+		getConsoleKey: function () {
+			return sessionStorage.getItem(CONSOLE_KEY) || "";
+		},
+	};
 
 	document.addEventListener("DOMContentLoaded", function () {
 		const access = document.documentElement.dataset.docsAccess;
@@ -155,7 +300,7 @@
 		if (logout) {
 			logout.addEventListener("submit", async function (event) {
 				event.preventDefault();
-				sessionStorage.removeItem("jxp_docs_console_key");
+				clearConsoleKey();
 				const csrfCookie = document.cookie.split("; ").find((value) => value.startsWith("jxp_docs_csrf="));
 				const token = csrfCookie ? decodeURIComponent(csrfCookie.split("=").slice(1).join("=")) : "";
 				await fetch("/docs/logout", {

@@ -50,7 +50,7 @@ MONGO_OPTIONS={"maxPoolSize":50}
 | `disabled` | Model explorer routes return 404 |
 | `public` | Model explorer open without sign-in |
 
-Sign-in uses the normal `POST /login` endpoint (same credentials as the API). The docs UI then stores a session cookie via `POST /docs/session` and auto-fills the API key for “Try it” panels.
+Sign-in uses `POST /docs/session` with email/password (same credentials as the API). That sets an HttpOnly session cookie and returns a short-lived console API key for “Try it” panels (stored in sessionStorage). If that key is later missing or revoked, the docs UI shows a re-auth modal.
 
 | Variable | Description |
 |----------|-------------|

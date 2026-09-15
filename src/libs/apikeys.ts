@@ -138,6 +138,13 @@ export async function createApiKey(userId: unknown, options: APIKeyCreateOptions
 	return { record, plaintext };
 }
 
+function isActiveApiKey(record: APIKeyRecord | null): record is APIKeyRecord {
+	if (!record) return false;
+	if (record.revoked_at) return false;
+	if (record.expires_at && record.expires_at.getTime() <= Date.now()) return false;
+	return true;
+}
+
 export async function findApiKey(value: string): Promise<APIKeyRecord | null> {
 	const keyHash = hashApiKey(value);
 	let record = await model().findOne({ key_hash: keyHash }).exec() as APIKeyRecord | null;
@@ -155,10 +162,14 @@ export async function findApiKey(value: string): Promise<APIKeyRecord | null> {
 			record.last4 = display.last4;
 		}
 	}
-	if (!record) return null;
-	if (record.revoked_at) return null;
-	if (record.expires_at && record.expires_at.getTime() <= Date.now()) return null;
-	return record;
+	return isActiveApiKey(record) ? record : null;
+}
+
+/** Active (non-revoked, non-expired) key owned by the user, by Mongo id. */
+export async function findActiveApiKeyById(userId: unknown, id: unknown): Promise<APIKeyRecord | null> {
+	if (id == null || id === "") return null;
+	const record = await model().findOne({ _id: id, user_id: userId }).exec() as APIKeyRecord | null;
+	return isActiveApiKey(record) ? record : null;
 }
 
 export async function markUsed(record: APIKeyRecord): Promise<void> {

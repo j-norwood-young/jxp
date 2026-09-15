@@ -391,17 +391,40 @@ export async function syncAllModels(
 
 	for (const name of names) {
 		const model = models[name];
+		const modelName = model.modelName || name;
 		try {
 			const before = await model.diffIndexes();
+			const toCreate = before.toCreate || [];
+			const toDrop = before.toDrop || [];
+			if (toCreate.length === 0 && toDrop.length === 0) {
+				results.push({ modelName, created: [], dropped: [] });
+				continue;
+			}
 			await model.syncIndexes();
+			const after = await model.diffIndexes();
+			const stillMissing = after.toCreate || [];
+			const stillExtra = after.toDrop || [];
+			if (stillMissing.length || stillExtra.length) {
+				results.push({
+					modelName,
+					created: toCreate.map((k) => JSON.stringify(k)),
+					dropped: toDrop,
+					error:
+						`Index drift remains after syncIndexes ` +
+						`(still missing: ${stillMissing.length}, still extra: ${stillExtra.length}). ` +
+						`Often caused by duplicate schema indexes on the same keys with different options ` +
+						`(e.g. field index:true plus schema.index with TTL/unique).`,
+				});
+				continue;
+			}
 			results.push({
-				modelName: name,
-				created: (before.toCreate || []).map((k) => JSON.stringify(k)),
-				dropped: before.toDrop || [],
+				modelName,
+				created: toCreate.map((k) => JSON.stringify(k)),
+				dropped: toDrop,
 			});
 		} catch (err) {
 			results.push({
-				modelName: name,
+				modelName,
 				error: err instanceof Error ? err.message : String(err),
 			});
 		}

@@ -59,6 +59,8 @@ Open **`/docs/diagnostics`** in the API docs browser (same sign-in as `/docs/api
 
 Use an **admin** API key in the docs top bar.
 
+After sync, the UI shows per-model **created** / **dropped** counts and any errors next to the Sync button. A common failure mode is duplicate schema indexes on the same keys with different options (for example `index: true` on a field plus `schema.index(..., { expireAfterSeconds })`); JXP’s built-in auth/log models avoid that pattern.
+
 ### Admin HTTP API
 
 Admin authentication required (`security.admin_only`).

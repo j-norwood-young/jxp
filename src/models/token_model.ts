@@ -20,11 +20,14 @@ const TokenSchema = new JXPSchema(
 		user_id: { type: global.ObjectId, index: true },
 		provider: String,
 		access_token: { type: String, index: true },
-		access_token_hash: { type: String, index: true },
+		// Unique/sparse index declared below — do not also set index: true here
+		// (duplicate same-key indexes block syncIndexes with option-mismatch errors).
+		access_token_hash: { type: String },
 		token_type: String,
 		expires_in: { type: Number, default: getTokenExpiry(), required: true },
 		last_accessed: { type: Date, default: Date.now, index: true },
-		expire_at: { type: Date, default: () => new Date(Date.now() + getTokenExpiry() * 1000), index: true },
+		// TTL index declared below — do not also set index: true here.
+		expire_at: { type: Date, default: () => new Date(Date.now() + getTokenExpiry() * 1000) },
 	},
 	{
 		perms: {
