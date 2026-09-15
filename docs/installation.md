@@ -12,9 +12,9 @@ Optional in-process response caching is available via environment variables (see
 
 If you want to send forgotten-password links, configure SMTP on your `JXP()` options object (see [Configuration](configuration.md#smtp-and-password-recovery)).
 
-### JXP 4
+### Compilation
 
-JXP 4 is implemented in TypeScript and published as compiled JavaScript in `dist/`. The npm package includes a prebuilt `dist/`; `npm install jxp` does not compile from source. Cloning the repo and running `npm install` builds automatically when `src/` is present. Consumer apps still define models as `*_model.js` files in `MODEL_DIR`.
+JXP is implemented in TypeScript and published as compiled JavaScript in `dist/`. The npm package includes a prebuilt `dist/`; `npm install jxp` does not compile from source. Cloning the repo and running `npm install` builds automatically when `src/` is present. Consumer apps still define models as `*_model.js` files in `MODEL_DIR`.
 
 ## Running on Docker
 

@@ -8,10 +8,39 @@ const {
 	summarizeFilter,
 	SYNC_CONFIRM_PHRASE,
 	syncAllModels,
+	alignModelIndexes,
+	ensurePrimaryIndexesAndWarnOthers,
+	ensurePrimaryIndexesOnStartup,
+	isPrimaryAuthModel,
 	formatAuditReportHuman,
 	listQueryLogs,
 	setQueryLogModel,
 } = require("../dist/libs/index_diagnostics");
+
+function mockModel({
+	modelName,
+	collectionName,
+	toCreate = [],
+	toDrop = [],
+	syncError = null,
+}) {
+	let syncCalled = false;
+	const model = {
+		modelName,
+		collection: { name: collectionName || `${modelName.toLowerCase()}s` },
+		schema: { indexes: () => [] },
+		listIndexes: async () => [{ name: "_id_", key: { _id: 1 } }],
+		diffIndexes: async () => ({ toCreate, toDrop }),
+		syncIndexes: async () => {
+			syncCalled = true;
+			if (syncError) throw syncError;
+		},
+	};
+	return {
+		model,
+		wasSyncCalled: () => syncCalled,
+	};
+}
 
 describe("index_diagnostics", () => {
 	it("detects collection scan alert", () => {
@@ -107,6 +136,71 @@ describe("index_diagnostics", () => {
 		} catch (err) {
 			expect(err.message).to.include(SYNC_CONFIRM_PHRASE);
 		}
+	});
+
+	it("identifies primary auth models", () => {
+		expect(isPrimaryAuthModel({ modelName: "APIKey" })).to.be.true;
+		expect(isPrimaryAuthModel({ modelName: "User" })).to.be.true;
+		expect(isPrimaryAuthModel({ modelName: "Reader" })).to.be.false;
+		expect(isPrimaryAuthModel({ modelName: "IndexQueryLog" })).to.be.false;
+	});
+
+	it("alignModelIndexes creates missing and drops extras", async () => {
+		const { model, wasSyncCalled } = mockModel({
+			modelName: "APIKey",
+			toCreate: [{ key_hash: 1 }],
+			toDrop: ["user_id_1"],
+		});
+		const result = await alignModelIndexes(model);
+		expect(wasSyncCalled()).to.be.true;
+		expect(result.created).to.eql([JSON.stringify({ key_hash: 1 })]);
+		expect(result.dropped).to.eql(["user_id_1"]);
+		expect(result.error).to.be.undefined;
+	});
+
+	it("alignModelIndexes skips sync when already aligned", async () => {
+		const { model, wasSyncCalled } = mockModel({
+			modelName: "User",
+			toCreate: [],
+			toDrop: [],
+		});
+		const result = await alignModelIndexes(model);
+		expect(wasSyncCalled()).to.be.false;
+		expect(result.created).to.eql([]);
+		expect(result.dropped).to.eql([]);
+	});
+
+	it("ensurePrimaryIndexesAndWarnOthers syncs primary and reports others missing", async () => {
+		const api = mockModel({
+			modelName: "APIKey",
+			toCreate: [],
+			toDrop: ["user_id_1"],
+		});
+		const reader = mockModel({
+			modelName: "Reader",
+			collectionName: "readers",
+			toCreate: [{ email: 1 }],
+			toDrop: ["stale_extra_1"],
+		});
+		const report = await ensurePrimaryIndexesAndWarnOthers(
+			{ apikey: api.model, reader: reader.model },
+			{ quiet: true }
+		);
+		expect(api.wasSyncCalled()).to.be.true;
+		expect(reader.wasSyncCalled()).to.be.false;
+		expect(report.primary).to.have.length(1);
+		expect(report.primary[0].dropped).to.eql(["user_id_1"]);
+		expect(report.missingOthers).to.have.length(1);
+		expect(report.missingOthers[0].modelName).to.eql("Reader");
+		expect(report.missingOthers[0].missing).to.eql([{ email: 1 }]);
+	});
+
+	it("ensurePrimaryIndexesOnStartup returns null when disabled", async () => {
+		const result = await ensurePrimaryIndexesOnStartup(
+			{},
+			{ index_diagnostics: { ensure_primary_on_startup: false } }
+		);
+		expect(result).to.eql(null);
 	});
 
 	it("listQueryLogs falls back to memory buffer when model unset", async () => {

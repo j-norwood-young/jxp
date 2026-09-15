@@ -410,6 +410,147 @@ export async function syncAllModels(
 	return results;
 }
 
+/**
+ * Auth models whose indexes are fully aligned on startup (create missing + drop extras).
+ * Stale unique indexes (e.g. legacy one-key-per-user on apikeys) can block login.
+ */
+export const PRIMARY_AUTH_MODEL_NAMES = new Set([
+	"User",
+	"APIKey",
+	"Token",
+	"RefreshToken",
+	"Usergroup",
+]);
+
+export function isPrimaryAuthModel(model: Model<unknown>): boolean {
+	return PRIMARY_AUTH_MODEL_NAMES.has(model.modelName);
+}
+
+/** Full syncIndexes for one model (create missing, drop extras). No confirm phrase. */
+export async function alignModelIndexes(model: Model<unknown>): Promise<SyncIndexesResult> {
+	const modelName = model.modelName;
+	try {
+		const before = await model.diffIndexes();
+		const toCreate = before.toCreate || [];
+		const toDrop = before.toDrop || [];
+		if (toCreate.length === 0 && toDrop.length === 0) {
+			return { modelName, created: [], dropped: [] };
+		}
+		await model.syncIndexes();
+		return {
+			modelName,
+			created: toCreate.map((k) => JSON.stringify(k)),
+			dropped: toDrop,
+		};
+	} catch (err) {
+		return {
+			modelName,
+			error: err instanceof Error ? err.message : String(err),
+		};
+	}
+}
+
+export interface StartupMissingOther {
+	modelName: string;
+	collection: string;
+	missing: Record<string, number>[];
+}
+
+export interface StartupIndexReport {
+	primary: SyncIndexesResult[];
+	missingOthers: StartupMissingOther[];
+}
+
+/**
+ * Align primary auth model indexes; collect missing indexes on all other models.
+ * Does not drop extras on non-primary models.
+ */
+export async function ensurePrimaryIndexesAndWarnOthers(
+	models: Record<string, Model<unknown>>,
+	opts?: { quiet?: boolean }
+): Promise<StartupIndexReport> {
+	const quiet = opts?.quiet ?? false;
+	const primary: SyncIndexesResult[] = [];
+	const missingOthers: StartupMissingOther[] = [];
+
+	const names = Object.keys(models).sort();
+	for (const name of names) {
+		const model = models[name];
+		if (isPrimaryAuthModel(model)) {
+			const result = await alignModelIndexes(model);
+			primary.push(result);
+			if (!quiet) {
+				if (result.error) {
+					console.warn(`! Failed to align indexes for ${result.modelName}: ${result.error}`);
+				} else {
+					const created = result.created?.length ?? 0;
+					const dropped = result.dropped?.length ?? 0;
+					if (created || dropped) {
+						const parts: string[] = [];
+						if (created) parts.push(`created ${created}`);
+						if (dropped) {
+							parts.push(
+								`dropped ${dropped}${result.dropped?.length ? ` (${result.dropped.join(", ")})` : ""}`
+							);
+						}
+						console.warn(`! Aligned indexes for ${result.modelName}: ${parts.join(", ")}`);
+					}
+				}
+			}
+			continue;
+		}
+
+		const entry = await auditModel(model);
+		if (entry.error) {
+			if (!quiet) {
+				console.warn(`! Could not audit indexes for ${entry.modelName}: ${entry.error}`);
+			}
+			continue;
+		}
+		if (entry.missing.length > 0) {
+			missingOthers.push({
+				modelName: entry.modelName,
+				collection: entry.collection,
+				missing: entry.missing,
+			});
+		}
+	}
+
+	if (!quiet && missingOthers.length > 0) {
+		const lines = missingOthers.map(
+			(m) =>
+				`  - ${m.modelName} (${m.collection}): ${m.missing.length} missing ` +
+				`(${m.missing.map((k) => JSON.stringify(k)).join(", ")})`
+		);
+		console.warn(
+			`! ${missingOthers.length} non-auth model(s) have missing indexes.\n` +
+				`${lines.join("\n")}\n` +
+				"  Fix with: npx jxp-indexes --sync --confirm DROP_EXTRA_INDEXES\n" +
+				"  Or open /docs/diagnostics after login."
+		);
+	}
+
+	return { primary, missingOthers };
+}
+
+/**
+ * Wait for Mongo, then align primary auth indexes and warn about other missing indexes.
+ * Returns null when disabled via config.
+ */
+export async function ensurePrimaryIndexesOnStartup(
+	models: Record<string, Model<unknown>>,
+	config: {
+		quiet_startup?: boolean;
+		index_diagnostics?: JXPIndexDiagnosticsConfig;
+	} = {}
+): Promise<StartupIndexReport | null> {
+	if (config.index_diagnostics?.ensure_primary_on_startup === false) {
+		return null;
+	}
+	await mongoose.connection.asPromise();
+	return ensurePrimaryIndexesAndWarnOthers(models, { quiet: !!config.quiet_startup });
+}
+
 import { loadAllModels } from "./builtin_models";
 
 /** Load app MODEL_DIR plus jxp built-in models (app overrides built-ins). */

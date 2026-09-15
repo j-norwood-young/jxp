@@ -2,7 +2,7 @@
 
 JXP is an opinionated REST framework: define Mongoose schemas and get a production-ready API with authentication, permissions, population, filtering, and more.
 
-JXP 4 requires **Node.js 22+**, ships as compiled TypeScript, and uses environment-based configuration (see [Installation](installation.md) and [TypeScript](typescript.md)).
+JXP requires **Node.js 22+**, ships as compiled TypeScript, and uses environment-based configuration (see [Installation](installation.md) and [TypeScript](typescript.md)).
 
 ## Features
 

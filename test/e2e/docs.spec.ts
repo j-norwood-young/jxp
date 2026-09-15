@@ -4,7 +4,9 @@ test("anonymous visitors see the JXP landing page without model metadata", async
 	await page.goto("/");
 	await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 	await expect(page.getByText("API at a glance")).toHaveCount(0);
-	await expect(page.getByRole("link", { name: /Browse API/i })).toBeVisible();
+	await expect(page.getByRole("link", { name: /^Documentation$/i })).toBeVisible();
+	await expect(page.getByRole("link", { name: /^Login$/i }).first()).toBeVisible();
+	await expect(page.getByRole("link", { name: /Browse API/i })).toHaveCount(0);
 });
 
 test("anonymous visitors are sent to login before the API browser", async ({ page }) => {

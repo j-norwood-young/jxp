@@ -40,7 +40,7 @@ Requires **Node.js 22+** and MongoDB for the sample server and integration tests
 
 ## TypeScript
 
-JXP 4 is implemented in TypeScript. See [docs/typescript.md](docs/typescript.md) for building from source, consuming types in JavaScript apps, and authoring typed models.
+JXP is implemented in TypeScript. See [docs/typescript.md](docs/typescript.md) for building from source, consuming types in JavaScript apps, and authoring typed models.
 
 ## Documentation
 

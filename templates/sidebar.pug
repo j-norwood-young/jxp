@@ -1,3 +1,6 @@
+-
+  const showOpsApi = docs_access !== 'protected' || docs_authenticated
+
 nav.docs-sidebar#docsSidebarDesktop(aria-label="Documentation navigation")
   .docs-sidebar-section
     .docs-sidebar-title Guides
@@ -5,20 +8,21 @@ nav.docs-sidebar#docsSidebarDesktop(aria-label="Documentation navigation")
       - const label = Object.keys(nav)[0]
       - const file = Object.values(nav)[0]
       a.docs-nav-link(href="/docs/md/" + file class=(active_guide === file ? 'active' : ''))= label
-  .docs-sidebar-section
-    .docs-sidebar-title Operations
-    if mcp_enabled
-      a.docs-nav-link(href="/docs/mcp" class=(active_section === 'mcp' ? 'active' : ''))
-        i.bi.bi-robot.me-1
-        | MCP assistant
-    a.docs-nav-link(href="/docs/diagnostics" class=(active_section === 'diagnostics' ? 'active' : ''))
-      i.bi.bi-speedometer2.me-1
-      | Index diagnostics
-  .docs-sidebar-section
-    .docs-sidebar-title API
-    a.docs-nav-link(href="/docs/api" class=(active_section === 'api' && !active_model ? 'active' : '')) Overview
-    each model_name in model_list
-      a.docs-nav-link(href="/docs/model/" + model_name class=(active_model === model_name ? 'active' : ''))= model_name
+  if showOpsApi
+    .docs-sidebar-section
+      .docs-sidebar-title Operations
+      if mcp_enabled
+        a.docs-nav-link(href="/docs/mcp" class=(active_section === 'mcp' ? 'active' : ''))
+          i.bi.bi-robot.me-1
+          | MCP assistant
+      a.docs-nav-link(href="/docs/diagnostics" class=(active_section === 'diagnostics' ? 'active' : ''))
+        i.bi.bi-speedometer2.me-1
+        | Index diagnostics
+    .docs-sidebar-section
+      .docs-sidebar-title API
+      a.docs-nav-link(href="/docs/api" class=(active_section === 'api' && !active_model ? 'active' : '')) Overview
+      each model_name in model_list
+        a.docs-nav-link(href="/docs/model/" + model_name class=(active_model === model_name ? 'active' : ''))= model_name
 
 //- Mobile offcanvas (same links)
 .offcanvas.offcanvas-start#docsSidebarOffcanvas(tabindex="-1" aria-labelledby="docsSidebarOffcanvasLabel")
@@ -32,11 +36,18 @@ nav.docs-sidebar#docsSidebarDesktop(aria-label="Documentation navigation")
         - const label = Object.keys(nav)[0]
         - const file = Object.values(nav)[0]
         a.docs-nav-link(href="/docs/md/" + file class=(active_guide === file ? 'active' : ''))= label
-    .docs-sidebar-section
-      .docs-sidebar-title Operations
-      a.docs-nav-link(href="/docs/diagnostics" class=(active_section === 'diagnostics' ? 'active' : '')) Index diagnostics
-    .docs-sidebar-section
-      .docs-sidebar-title API
-      a.docs-nav-link(href="/docs/api" class=(active_section === 'api' && !active_model ? 'active' : '')) Overview
-      each model_name in model_list
-        a.docs-nav-link(href="/docs/model/" + model_name class=(active_model === model_name ? 'active' : ''))= model_name
+    if showOpsApi
+      .docs-sidebar-section
+        .docs-sidebar-title Operations
+        if mcp_enabled
+          a.docs-nav-link(href="/docs/mcp" class=(active_section === 'mcp' ? 'active' : ''))
+            i.bi.bi-robot.me-1
+            | MCP assistant
+        a.docs-nav-link(href="/docs/diagnostics" class=(active_section === 'diagnostics' ? 'active' : ''))
+          i.bi.bi-speedometer2.me-1
+          | Index diagnostics
+      .docs-sidebar-section
+        .docs-sidebar-title API
+        a.docs-nav-link(href="/docs/api" class=(active_section === 'api' && !active_model ? 'active' : '')) Overview
+        each model_name in model_list
+          a.docs-nav-link(href="/docs/model/" + model_name class=(active_model === model_name ? 'active' : ''))= model_name

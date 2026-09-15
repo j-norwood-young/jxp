@@ -1,6 +1,6 @@
-# TypeScript (v4)
+# TypeScript
 
-JXP 4 is written in TypeScript and published as compiled JavaScript plus `.d.ts` declaration files.
+JXP is written in TypeScript and published as compiled JavaScript plus `.d.ts` declaration files.
 
 ## Building from source
 

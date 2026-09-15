@@ -69,6 +69,12 @@ export interface JXPQueryMonitorConfig {
 export interface JXPIndexDiagnosticsConfig {
 	enabled?: boolean;
 	query_monitor?: JXPQueryMonitorConfig;
+	/**
+	 * When true (default), on startup fully align indexes for primary auth models
+	 * (User, APIKey, Token, RefreshToken, Usergroup) via syncIndexes, and warn
+	 * about missing indexes on other models. Set false to disable.
+	 */
+	ensure_primary_on_startup?: boolean;
 }
 
 export interface JXPMcpConfig {

@@ -904,6 +904,11 @@ const JXP = function (options: JXPConfig) {
 	void warnAboutLegacyApiKeys(models, config).catch((err) => {
 		if (!config.quiet_startup) console.warn("Could not check legacy API keys:", err);
 	});
+	void index_diagnostics.ensurePrimaryIndexesOnStartup(models, config).catch((err: unknown) => {
+		if (!config.quiet_startup) {
+			console.warn("Could not align primary auth indexes:", err);
+		}
+	});
 
 	// Set up our API server
 

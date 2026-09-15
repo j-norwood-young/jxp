@@ -25,6 +25,7 @@ const assetsDir = path.join(packageRoot, "templates", "assets");
 const ASSET_TYPES: Record<string, string> = {
     css: "text/css; charset=utf-8",
     js: "application/javascript; charset=utf-8",
+    svg: "image/svg+xml",
 };
 
 const LANDING_FEATURES = [
@@ -187,10 +188,11 @@ class Docs {
                 return next(new errors.NotFoundError("Asset not found"));
             }
             const body = fs.readFileSync(resolved);
+            const isImmutable = ext === "svg";
             res.writeHead(200, {
                 'Content-Length': body.length,
                 'Content-Type': ASSET_TYPES[ext],
-                'Cache-Control': 'public, max-age=3600',
+                'Cache-Control': isImmutable ? 'public, max-age=3600' : 'no-cache, must-revalidate',
             });
             res.write(body);
             res.end();
@@ -258,6 +260,7 @@ class Docs {
         try {
             this.renderTemplate(res, "index", {
                 active_section: "home",
+                hide_sidebar: true,
                 features: LANDING_FEATURES,
                 base_url: this.getBaseUrl(req),
             }, req);

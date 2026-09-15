@@ -1,16 +1,17 @@
 header.docs-topbar.navbar.navbar-expand-lg.sticky-top
   .container-fluid.px-3
-    button.btn.btn-outline-secondary.btn-sm.d-lg-none.me-2(type="button" data-bs-toggle="offcanvas" data-bs-target="#docsSidebarOffcanvas" aria-controls="docsSidebarOffcanvas" aria-label="Open navigation")
-      i.bi.bi-list
-    a.docs-brand.navbar-brand.mb-0(href="/")= name
-    span.badge.bg-secondary.ms-2.align-self-center v#{version}
+    unless hide_sidebar
+      button.btn.btn-outline-secondary.btn-sm.d-lg-none.me-2(type="button" data-bs-toggle="offcanvas" data-bs-target="#docsSidebarOffcanvas" aria-controls="docsSidebarOffcanvas" aria-label="Open navigation")
+        i.bi.bi-list
+    a.docs-brand.navbar-brand.mb-0(href="/")
+      img.docs-brand-logo(src=`/docs/assets/jxp-logo.svg?v=${version}` alt="" width="28" height="28")
+      span= name
+    span.badge.docs-version-badge.ms-2.align-self-center v#{version}
     .ms-auto.d-flex.align-items-center.gap-2.flex-wrap
       if docs_access === 'protected' && !docs_authenticated
-        a.btn.btn-sm.btn-outline-primary(href="/docs/login?next=/docs/api") Explore API
-        if mcp_enabled
-          a.btn.btn-sm.btn-outline-primary(href="/docs/login?next=/docs/mcp") Ask MCP
+        a.btn.btn-sm.btn-outline-light.docs-btn-secondary(href="/docs/login?next=/docs/api") Login
       if docs_access === 'protected' && docs_authenticated
-        a.btn.btn-sm.btn-outline-primary(href="/docs/account/keys") API keys
+        a.btn.btn-sm.btn-outline-secondary.docs-btn-ghost(href="/docs/account/keys") API keys
       if docs_access !== 'disabled' && (docs_access !== 'protected' || docs_authenticated)
         .docs-api-key-wrap
           label.visually-hidden(for="docs-api-key") API Key
@@ -24,6 +25,6 @@ header.docs-topbar.navbar.navbar-expand-lg.sticky-top
           label.form-check-label(for="docs-remember-key") Remember
         if docs_access === 'protected'
           form.d-inline(method="post" action="/docs/logout")
-            button.btn.btn-sm.btn-link.text-muted(type="submit") Sign out
+            button.btn.btn-sm.btn-link.docs-signout(type="submit") Sign out
         else
           span.docs-security-note.text-muted.d-none.d-md-inline Dev only

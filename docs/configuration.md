@@ -1,6 +1,6 @@
 # Configuration
 
-JXP 4 uses **environment variables** and [dotenv](https://github.com/motdotla/dotenv). Copy [`.env.sample`](../.env.sample) to `.env` and adjust values.
+JXP uses **environment variables** and [dotenv](https://github.com/motdotla/dotenv). Copy [`.env.sample`](../.env.sample) to `.env` and adjust values.
 
 _As of version 4, there is no `config` npm package and no `/config/*.json` hierarchy._
 
@@ -96,6 +96,8 @@ QUERY_INDEX_SAMPLE_RATE=1.0
 ```
 
 Admin endpoints (require admin login): `GET /diagnostics/indexes`, `GET /diagnostics/queries`, `POST /diagnostics/indexes/sync`. CLI: `npm run indexes` or `jxp-indexes`.
+
+On startup, JXP automatically aligns indexes for primary auth models (`User`, `APIKey`, `Token`, `RefreshToken`, `Usergroup`) and warns about missing indexes on other models. Disable with `index_diagnostics.ensure_primary_on_startup: false`.
 
 See [Index diagnostics](index_diagnostics.md).
 

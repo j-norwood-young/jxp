@@ -8,7 +8,7 @@ block content
         p.text-muted.small.mb-4
           | Use your normal API account (
           code POST /login
-          | ). Guides and this site stay open; model pages and “Try it” need a session.
+          | ).
         #docs-login-error.alert.alert-danger(role="alert" hidden)
         form#docs-login-form
           input(type="hidden" name="next" value=docs_next)
@@ -29,11 +29,11 @@ block content
               required
               autocomplete="current-password"
             )
-          button.btn.btn-primary.w-100(type="submit") Sign in
+          button.btn.docs-btn-primary.w-100(type="submit") Sign in
         p.mt-3.mb-0.small.text-muted
           a(href="/") Back to home
           |  · 
           a(href="/docs/md/api.md") Read API docs without signing in
 
 block javascripts
-  script(src="/docs/assets/docs-login.js" defer)
+  script(src=`/docs/assets/docs-login.js?v=${version}` defer)

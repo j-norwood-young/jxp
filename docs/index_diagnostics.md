@@ -6,6 +6,23 @@ JXP can compare **Mongoose schema indexes** to indexes in MongoDB, optionally sy
 
 Mongoose provides `Model.diffIndexes()` and `Model.syncIndexes()`. JXP wraps these for all loaded models.
 
+### Startup (primary auth models)
+
+On boot, after Mongo is connected, JXP **fully aligns** indexes for primary auth models via `syncIndexes()` (create missing **and** drop extras not in the schema):
+
+- `User`, `APIKey`, `Token`, `RefreshToken`, `Usergroup`
+
+This prevents login-blocking drift such as a leftover unique `user_id_1` on `apikeys` from the pre–JXP 6 one-key-per-user era (`E11000 duplicate key`), which would otherwise block API key creation before admins can open `/docs/diagnostics`.
+
+For **all other** loaded models, startup only **warns** about missing indexes (it does not drop extras). Use the CLI or diagnostics UI for a full sync of those collections.
+
+| Path | Scope | Drops extras? | Confirm phrase? |
+|------|--------|---------------|-----------------|
+| Startup | Primary auth only | Yes | No (automatic) |
+| `jxp-indexes --sync` / `POST …/sync` | All models | Yes | `DROP_EXTRA_INDEXES` |
+
+Disable with `index_diagnostics.ensure_primary_on_startup: false` (or skip chatter with `quiet_startup`).
+
 ### CLI
 
 ```bash
@@ -96,6 +113,8 @@ In production, set `INDEX_DIAGNOSTICS_ENABLED=true` (and tune sample rate) to en
 JXP({
   index_diagnostics: {
     enabled: true,
+    /** default true — align User/APIKey/Token/RefreshToken/Usergroup indexes on boot */
+    ensure_primary_on_startup: true,
     query_monitor: {
       enabled: true,
       sample_rate: 0.05,
@@ -105,7 +124,7 @@ JXP({
 });
 ```
 
-Register the monitor **before** models load (the sample `server.ts` calls `registerQueryIndexMonitor()` before `JXP()`).
+Register the monitor **before** models load (the sample `server.ts` calls `registerQueryIndexMonitor()` before `JXP()`). Primary-auth index alignment runs automatically inside `JXP()` after models load (unless `ensure_primary_on_startup` is `false`).
 
 ## Programmatic use
 
@@ -113,6 +132,7 @@ Register the monitor **before** models load (the sample `server.ts` calls `regis
 const {
   auditAllModels,
   syncAllModels,
+  ensurePrimaryIndexesAndWarnOthers,
   loadModelsFromDir,
   classifyExplain,
 } = require("jxp/libs/index_diagnostics");

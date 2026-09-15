@@ -2,7 +2,7 @@
 
 Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 
-## v6.0.0 — unreleased
+## v6.0.0
 
 ### Changed
 
@@ -10,12 +10,15 @@ Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 - Login no longer returns an API key. Keys are independently managed, hashed at rest, expirable, revocable, and support per-model CRUD scopes.
 - The docs application and model metadata are protected by a login session.
 - jxp-helper v3 uses native fetch and has no Axios dependency.
+- Docs home is a full-bleed graphite/amber landing; guests see Documentation + Login, not API explorer chrome.
 
 ### Added
 
 - Additive API key migration and post-v5 plaintext purge commands.
 - Authenticated API key management under `/docs/account/keys`.
-
+- Docs favicon and brand mark use the JXP logo (`/docs/assets/jxp-logo.svg`).
+- Guest docs sidebar shows Guides only; Operations and API appear after login.
+- **Startup index alignment** — on boot, fully sync indexes for primary auth models (`User`, `APIKey`, `Token`, `RefreshToken`, `Usergroup`) so stale unique indexes (e.g. legacy one-key-per-user on `apikeys`) cannot block login; warn about missing indexes on other models. Disable with `index_diagnostics.ensure_primary_on_startup: false`. See [Index diagnostics](index_diagnostics.md#startup-primary-auth-models).
 ## v5.1.0 — 2026-08-18
 
 ### Fixed

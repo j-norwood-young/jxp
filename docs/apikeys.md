@@ -38,6 +38,8 @@ Models whose schema grants unauthenticated access through `perms.all` remain pub
 
 `jxp-migrate-apikeys` backfills a keyed hash and display metadata without changing the legacy `apikey` field. The same key therefore continues to authenticate against both versions. The migration also removes the one-key-per-user index and makes the legacy plaintext index sparse so JXP 6 can create multiple hash-only keys.
 
+JXP also **aligns `APIKey` (and other primary auth) indexes on every startup**, so a leftover unique `user_id_1` that was never migrated is dropped automatically — otherwise creating a second key for the same user fails with `E11000` and login can break before you reach diagnostics. See [Index diagnostics — Startup](index_diagnostics.md#startup-primary-auth-models).
+
 During dual-run, keep at least one migrated legacy key for every user that must still log in through JXP 5. JXP 5 cannot use a newly created hash-only key, and its login endpoint may select the newest key if all legacy keys for that user have been revoked.
 
 While plaintext values remain, JXP prints a startup warning. To suppress it temporarily during a planned dual-run, set `APIKEY_LEGACY_DUAL_RUN=true`.
