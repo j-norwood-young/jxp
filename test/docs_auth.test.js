@@ -170,7 +170,9 @@ describe("docs_auth", () => {
 			});
 		});
 
-		it("serves account settings and changes password via console key", (done) => {
+		it("serves account settings and changes password via console key", function (done) {
+			// Login + bcrypt verify/hash for password change exceeds the suite's 1s default on CI.
+			this.timeout(10000);
 			const agent = chai.request.agent(server);
 			const security = require("../dist/libs/security");
 			const path = require("path");
