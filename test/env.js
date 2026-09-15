@@ -27,5 +27,5 @@ process.env.QUERY_LIMITS_MAX = process.env.QUERY_LIMITS_MAX || "1000";
 process.env.QUERY_LIMITS_DEFAULT = process.env.QUERY_LIMITS_DEFAULT || "100";
 // Docs browser tests use protected mode; set DOCS_ACCESS=public to match old open behavior.
 process.env.DOCS_ACCESS = process.env.DOCS_ACCESS || "protected";
-process.env.LOGIN_RATE_LIMIT_ENABLED =
-	process.env.LOGIN_RATE_LIMIT_ENABLED ?? "false";
+// Always off for the shared test server (login_rate_limit.test.js covers throttle in isolation).
+process.env.LOGIN_RATE_LIMIT_ENABLED = "false";

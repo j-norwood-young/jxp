@@ -1,0 +1,168 @@
+extends layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-4
+    div
+      h1 Account settings
+      p.text-muted.mb-0 Manage your password and multi-factor authentication.
+    a.btn.btn-outline-secondary(href="/docs/account/keys") API keys
+
+  #settings-flash.alert.d-none(role="alert")
+
+  section.card.mb-4.docs-settings-section#password-section
+    .card-body
+      h2.h5 Change password
+      p.text-muted.small Enter your current password, then choose a new one (min. 8 characters).
+      form#password-form
+        .row.g-3
+          .col-md-4
+            label.form-label(for="current-password") Current password
+            input#current-password.form-control(type="password" name="current_password" required autocomplete="current-password")
+          .col-md-4
+            label.form-label(for="new-password") New password
+            input#new-password.form-control(type="password" name="new_password" required minlength="8" autocomplete="new-password")
+          .col-md-4
+            label.form-label(for="confirm-password") Confirm new password
+            input#confirm-password.form-control(type="password" name="confirm_password" required minlength="8" autocomplete="new-password")
+        button.btn.docs-btn-primary.mt-3(type="submit") Update password
+
+  section.card.mb-4.docs-settings-section#totp-section
+    .card-body
+      .d-flex.justify-content-between.align-items-start.gap-3.flex-wrap
+        div
+          h2.h5 Authenticator app (TOTP)
+          p.text-muted.small.mb-0
+            | Works with Google Authenticator, 1Password, Authy, and YubiKey OATH via Yubico Authenticator.
+            |  For a YubiKey as a hardware login key, use Passkeys below.
+        span#totp-status.badge.docs-settings-status.text-bg-secondary Loading…
+      #totp-enabled-panel.d-none.mt-3
+        p.mb-3 TOTP is enabled on this account.
+        button#totp-disable-btn.btn.btn-outline-danger(type="button") Disable authenticator
+      #totp-disabled-panel.d-none.mt-3
+        button#totp-start-btn.btn.docs-btn-primary(type="button") Set up authenticator
+
+  section.card.mb-4.docs-settings-section#passkey-section
+    .card-body
+      .d-flex.justify-content-between.align-items-start.gap-3.flex-wrap
+        div
+          h2.h5 Passkeys
+          p.text-muted.small.mb-0
+            | Register a platform authenticator, security key, or YubiKey (FIDO2) for passwordless sign-in via “Login with Passkey”. Passkeys are not used as a second factor after password.
+        button#passkey-add-btn.btn.docs-btn-primary(type="button") Add passkey
+      .table-responsive.mt-3
+        table.table.table-sm.mb-0
+          thead
+            tr
+              th Name
+              th Added
+              th Device
+              th
+          tbody#passkeys-list
+            tr
+              td.text-muted(colspan="4") Loading…
+
+  //- TOTP setup modal
+  #totp-setup-modal.modal.fade(tabindex="-1" aria-labelledby="totp-setup-title" aria-hidden="true")
+    .modal-dialog.modal-dialog-centered.modal-lg
+      .modal-content.docs-settings-modal-content
+        .modal-header.border-secondary
+          h2#totp-setup-title.h5.modal-title Set up authenticator
+          button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+        .modal-body
+          .row.g-4
+            .col-md-auto.text-center
+              img#totp-qr.docs-totp-qr(alt="TOTP QR code" width="240" height="240")
+              p.small.text-muted.mt-2.mb-0 Scan with your authenticator or Yubico Authenticator
+            .col-md
+              p.small.mb-2 Or enter this secret manually:
+              code#totp-secret.d-inline-block.mb-2
+              .mb-3
+                a#totp-otpauth-link.small(href="#" rel="noopener") Open otpauth link
+              #totp-backup-wrap.mb-3
+                p.small.fw-semibold Save these backup codes now. They will not be shown again.
+                pre#totp-backup-codes.docs-backup-codes
+              form#totp-confirm-form
+                label.form-label(for="totp-confirm-code") Enter the 6-digit code from the app
+                input#totp-confirm-code.form-control(
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  spellcheck="false"
+                  required
+                )
+                .form-text After scanning, enter a live 6-digit code (not the secret or a backup code).
+                .text-danger.small.mt-2#totp-confirm-error(hidden)
+        .modal-footer.border-secondary
+          button.btn.btn-outline-secondary(type="button" data-bs-dismiss="modal") Cancel
+          button.btn.docs-btn-primary(type="submit" form="totp-confirm-form") Confirm and enable
+
+  //- TOTP disable modal
+  #totp-disable-modal.modal.fade(tabindex="-1" aria-labelledby="totp-disable-title" aria-hidden="true")
+    .modal-dialog.modal-dialog-centered
+      .modal-content.docs-settings-modal-content
+        .modal-header.border-secondary
+          h2#totp-disable-title.h5.modal-title Disable authenticator
+          button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+        form#totp-disable-form
+          .modal-body
+            p.text-muted.small
+              | Enter a current 6-digit authenticator code or an unused backup code to confirm.
+            label.form-label(for="totp-disable-code") Verification or backup code
+            input#totp-disable-code.form-control(
+              type="text"
+              autocomplete="one-time-code"
+              spellcheck="false"
+              required
+            )
+            .form-text Use a 6-digit authenticator code, or one of your backup codes.
+            .text-danger.small.mt-2#totp-disable-error(hidden)
+          .modal-footer.border-secondary
+            button.btn.btn-outline-secondary(type="button" data-bs-dismiss="modal") Cancel
+            button.btn.btn-outline-danger(type="submit") Disable TOTP
+
+  //- Passkey delete modal
+  #passkey-delete-modal.modal.fade(tabindex="-1" aria-labelledby="passkey-delete-title" aria-hidden="true")
+    .modal-dialog.modal-dialog-centered
+      .modal-content.docs-settings-modal-content
+        .modal-header.border-secondary
+          h2#passkey-delete-title.h5.modal-title Remove passkey
+          button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+        form#passkey-delete-form
+          .modal-body
+            p#passkey-delete-message.text-muted.small.mb-3
+              | Remove this passkey from your account?
+            #passkey-delete-password-wrap.d-none
+              label.form-label(for="passkey-delete-password") Password
+              input#passkey-delete-password.form-control(
+                type="password"
+                autocomplete="current-password"
+              )
+              .form-text Required when removing your last passkey while TOTP is off.
+            .text-danger.small.mt-2#passkey-delete-error(hidden)
+          .modal-footer.border-secondary
+            button.btn.btn-outline-secondary(type="button" data-bs-dismiss="modal") Cancel
+            button.btn.btn-outline-danger(type="submit") Remove passkey
+
+  //- Passkey name modal (after WebAuthn ceremony)
+  #passkey-name-modal.modal.fade(tabindex="-1" aria-labelledby="passkey-name-title" aria-hidden="true")
+    .modal-dialog.modal-dialog-centered
+      .modal-content.docs-settings-modal-content
+        .modal-header.border-secondary
+          h2#passkey-name-title.h5.modal-title Name this passkey
+          button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+        form#passkey-name-form
+          .modal-body
+            label.form-label(for="passkey-name-input") Display name
+            input#passkey-name-input.form-control(
+              type="text"
+              value="Passkey"
+              maxlength="64"
+              required
+              autocomplete="off"
+            )
+          .modal-footer.border-secondary
+            button.btn.btn-outline-secondary(type="button" data-bs-dismiss="modal") Cancel
+            button.btn.docs-btn-primary(type="submit") Save passkey
+
+block javascripts
+  script(src=`/docs/assets/account-settings.js?v=${version}` defer)

@@ -227,12 +227,7 @@ export async function loginPage(
 	});
 }
 
-/** Establish a docs session directly from credentials without exposing a long-lived API key. */
-export async function establishSession(req: JXPRequest, res: JXPResponse): Promise<void> {
-	const access = getDocsAccess(req.config);
-	if (access !== "protected") {
-		throw new errors.NotFoundError("Not found");
-	}
+function assertSameOriginLogin(req: JXPRequest): void {
 	const origin = req.headers.origin;
 	if (typeof origin === "string" && req.headers.host) {
 		try {
@@ -244,21 +239,14 @@ export async function establishSession(req: JXPRequest, res: JXPResponse): Promi
 			throw new errors.ForbiddenError("Invalid login origin");
 		}
 	}
-	const email = String(req.body?.email ?? "").trim().toLowerCase();
-	const password = String(req.body?.password ?? "");
-	if (!email || !password) {
-		throw new errors.BadRequestError("email and password are required");
-	}
-	const security = require("./security");
+}
+
+async function createDocsSessionForUser(
+	req: JXPRequest,
+	res: JXPResponse,
+	user: { _id: unknown; email: string }
+): Promise<void> {
 	const apikeys = require("./apikeys");
-	let user: { _id: unknown; email: string };
-	try {
-		user = await security.basicAuth([email, password]);
-	} catch {
-		throw new errors.UnauthorizedError("Incorrect email or password");
-	}
-	// Revoke only this browser's previous console key (if any). Other browsers
-	// keep their own Docs console sessions.
 	const prior = verifyDocsSession(req);
 	if (prior?.console_key_id && prior.user_id === String(user._id)) {
 		await apikeys.revokeApiKey(user._id, prior.console_key_id);
@@ -281,6 +269,133 @@ export async function establishSession(req: JXPRequest, res: JXPResponse): Promi
 		console_key_id: consoleKeyId,
 		csrf_token: csrf,
 	});
+}
+
+/** Establish a docs session directly from credentials without exposing a long-lived API key. */
+export async function establishSession(req: JXPRequest, res: JXPResponse): Promise<void> {
+	const access = getDocsAccess(req.config);
+	if (access !== "protected") {
+		throw new errors.NotFoundError("Not found");
+	}
+	assertSameOriginLogin(req);
+	const email = String(req.body?.email ?? "").trim().toLowerCase();
+	const password = String(req.body?.password ?? "");
+	if (!email || !password) {
+		throw new errors.BadRequestError("email and password are required");
+	}
+	const security = require("./security");
+	const login = require("./login");
+	let user: { _id: unknown; email: string; totp_enabled?: boolean };
+	try {
+		user = await security.basicAuth([email, password]);
+	} catch {
+		throw new errors.UnauthorizedError("Incorrect email or password");
+	}
+	const mfa = await login.requireMfaChallengeResponse(user, req.config);
+	if (mfa) {
+		res.send(mfa);
+		return;
+	}
+	await createDocsSessionForUser(req, res, user);
+}
+
+/** Complete docs login after MFA challenge (TOTP code). */
+export async function establishSessionMfa(req: JXPRequest, res: JXPResponse): Promise<void> {
+	const access = getDocsAccess(req.config);
+	if (access !== "protected") {
+		throw new errors.NotFoundError("Not found");
+	}
+	assertSameOriginLogin(req);
+	const challenge = String(req.body?.challenge ?? "");
+	const code = String(req.body?.code ?? "");
+	if (!challenge || !code) {
+		throw new errors.BadRequestError("challenge and code are required");
+	}
+	const mfaChallenge = require("./mfa_challenge");
+	const totp = require("./totp");
+	let peeked: { user_id: string };
+	try {
+		peeked = mfaChallenge.peekMfaChallenge(challenge);
+	} catch {
+		throw new errors.UnauthorizedError("Invalid MFA code");
+	}
+	const ok = await totp.verifyCodeOrBackup(peeked.user_id, code);
+	if (!ok) {
+		throw new errors.UnauthorizedError("Invalid MFA code");
+	}
+	try {
+		await mfaChallenge.consumeMfaChallenge(challenge, req.config);
+	} catch {
+		throw new errors.UnauthorizedError("Invalid MFA code");
+	}
+	const { getModelFromRegistry } = require("./builtin_models");
+	const User = getModelFromRegistry(modelRegistry, "user");
+	const user = (await User.findById(peeked.user_id).select("email").lean().exec()) as {
+		_id: unknown;
+		email: string;
+	} | null;
+	if (!user?.email) {
+		throw new errors.UnauthorizedError("Invalid MFA code");
+	}
+	await createDocsSessionForUser(req, res, user);
+}
+
+/** Start passwordless passkey login for the docs browser. */
+export async function establishSessionPasskeyOptions(
+	req: JXPRequest,
+	res: JXPResponse
+): Promise<void> {
+	const access = getDocsAccess(req.config);
+	if (access !== "protected") {
+		throw new errors.NotFoundError("Not found");
+	}
+	assertSameOriginLogin(req);
+	const webauthn = require("./webauthn");
+	const email = String(req.body?.email ?? "").trim().toLowerCase() || undefined;
+	res.send(await webauthn.beginAuthentication({ email }, req.config, req));
+}
+
+/** Complete passwordless passkey login and establish a docs session. */
+export async function establishSessionPasskeyVerify(
+	req: JXPRequest,
+	res: JXPResponse
+): Promise<void> {
+	const access = getDocsAccess(req.config);
+	if (access !== "protected") {
+		throw new errors.NotFoundError("Not found");
+	}
+	assertSameOriginLogin(req);
+	const webauthn = require("./webauthn");
+	const { getModelFromRegistry } = require("./builtin_models");
+	let auth: { user_id: string };
+	try {
+		auth = await webauthn.finishAuthentication(
+			{
+				challenge_token: req.body?.challenge_token,
+				response: req.body?.response || req.body?.credential,
+			},
+			req.config,
+			req
+		);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		console.error(new Date().toISOString(), "Docs passkey login failed:", message);
+		// Prefer an explicit JSON body so browsers don't show an "empty" 401.
+		res.status(401);
+		res.send({ ok: false, code: "Unauthorized", message: "Passkey authentication failed" });
+		return;
+	}
+	const User = getModelFromRegistry(modelRegistry, "user");
+	const user = (await User.findById(auth.user_id).select("email").lean().exec()) as {
+		_id: unknown;
+		email: string;
+	} | null;
+	if (!user?.email) {
+		res.status(401);
+		res.send({ ok: false, code: "Unauthorized", message: "Passkey authentication failed" });
+		return;
+	}
+	await createDocsSessionForUser(req, res, user);
 }
 
 export async function getSession(req: JXPRequest, res: JXPResponse): Promise<void> {

@@ -8,28 +8,48 @@ block content
         p.text-muted.small.mb-4
           | Use your normal API account (
           code POST /login
-          | ).
+          | ), or sign in with a passkey / YubiKey.
         #docs-login-error.alert.alert-danger(role="alert" hidden)
         form#docs-login-form
           input(type="hidden" name="next" value=docs_next)
-          .mb-3
-            label.form-label(for="docs-login-email") Email
-            input#docs-login-email.form-control(
-              type="email"
-              name="email"
-              value=docs_user_email
-              required
-              autocomplete="username"
-            )
-          .mb-3
-            label.form-label(for="docs-login-password") Password
-            input#docs-login-password.form-control(
-              type="password"
-              name="password"
-              required
-              autocomplete="current-password"
-            )
-          button.btn.docs-btn-primary.w-100(type="submit") Sign in
+          #docs-login-credentials
+            .mb-3
+              label.form-label(for="docs-login-email") Email
+              input#docs-login-email.form-control(
+                type="email"
+                name="email"
+                value=docs_user_email
+                required
+                autocomplete="username"
+              )
+            .mb-3
+              label.form-label(for="docs-login-password") Password
+              input#docs-login-password.form-control(
+                type="password"
+                name="password"
+                required
+                autocomplete="current-password"
+              )
+          #docs-login-mfa(hidden)
+            .mb-3
+              label.form-label(for="docs-login-code") Authenticator code
+              input#docs-login-code.form-control(
+                type="text"
+                name="code"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                placeholder="6-digit code"
+              )
+              .form-text You can also use a backup code.
+          button#docs-login-submit.btn.docs-btn-primary.w-100(type="submit") Sign in
+        #docs-login-passkey-wrap.mt-3
+          .docs-login-divider.text-center.text-muted.small.mb-3
+            span or
+          button#docs-login-passkey.btn.btn-outline-light.w-100(type="button")
+            i.bi.bi-fingerprint.me-2
+            | Login with Passkey
+          p.form-text.mb-0.mt-2
+            | Enter your email above when using a security key (YubiKey). Platform passkeys can work without it.
         p.mt-3.mb-0.small.text-muted
           a(href="/") Back to home
           |  · 

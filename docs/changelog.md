@@ -4,6 +4,12 @@ Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 
 ## v6.1.2 — 2026-09-15
 
+### Added
+
+- **Docs Account menu** — top-right Account dropdown with Settings, API Keys, and Sign Out. Settings (`/docs/account/settings`) covers password change, TOTP enroll/disable, and passkey register/remove.
+- **`POST /login/password`** — authenticated password change with current password verification.
+- **Docs passkey login** — passwordless **Login with Passkey** on the docs sign-in page and re-auth modal (`POST /docs/session/webauthn/options` + `/verify`). Passkeys are not used as MFA after password.
+
 ### Fixed
 
 - **Aggregate `$expr`** — `$match` stages in `/aggregate` no longer reject `$expr`. List/query filters still deny `$expr`; `$where`, `$function`, `$accumulator`, and `$jsonSchema` remain blocked in both contexts. Matches documented aggregation examples.
@@ -14,6 +20,9 @@ Notable changes to [JXP](https://github.com/WorkSpaceMan/jxp).
 
 ### Added
 
+- **TOTP MFA** — optional per-user authenticator enrollment (`/login/totp/*`) and challenge completion (`POST /login/mfa`). Password login returns `mfa_required` when enabled.
+- **Passkeys (WebAuthn)** — register/list/delete credentials; passwordless login via `/login/webauthn/*` (and docs **Login with Passkey**). Passkeys are not an MFA method after password.
+- **Docs MFA** — docs sign-in prompts for a TOTP/backup code via `POST /docs/session/mfa` when the account has MFA enabled.
 - **Docs re-auth modal** — when the ephemeral docs console API key is missing, revoked, or expired while a session cookie remains, the docs UI prompts for login again via a modal instead of appearing signed in with a dead key.
 - **Concurrent docs sessions** — logging in from a second browser no longer revokes the first browser’s Docs console key; each login gets its own ephemeral key (re-login in the same browser still replaces that browser’s prior key).
 

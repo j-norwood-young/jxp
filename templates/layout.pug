@@ -53,9 +53,15 @@ html(lang="en" data-bs-theme="dark" data-docs-access=docs_access)
                     autocomplete="current-password"
                   )
                 button.btn.docs-btn-primary.w-100(type="submit") Sign in
+              .docs-login-divider.text-center.text-muted.small.my-3
+                span or
+              button#docs-reauth-passkey.btn.btn-outline-light.w-100(type="button")
+                i.bi.bi-fingerprint.me-2
+                | Login with Passkey
             .modal-footer.border-secondary.justify-content-between
               a.small.text-muted(href="/") Back to home
               a.small.text-muted(href="/docs/md/api.md") Read guides
     script(src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous")
+    script(src=`/docs/assets/docs-passkey-login.js?v=${version}` defer)
     script(src=`/docs/assets/api-console.js?v=${version}` defer)
     block javascripts

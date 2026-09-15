@@ -10,8 +10,6 @@ header.docs-topbar.navbar.navbar-expand-lg.sticky-top
     .ms-auto.d-flex.align-items-center.gap-2.flex-wrap
       if docs_access === 'protected' && !docs_authenticated
         a.btn.btn-sm.btn-outline-light.docs-btn-secondary(href="/docs/login?next=/docs/api") Login
-      if docs_access === 'protected' && docs_authenticated
-        a.btn.btn-sm.btn-outline-secondary.docs-btn-ghost(href="/docs/account/keys") API keys
       if docs_access !== 'disabled' && (docs_access !== 'protected' || docs_authenticated)
         .docs-api-key-wrap
           label.visually-hidden(for="docs-api-key") API Key
@@ -23,8 +21,33 @@ header.docs-topbar.navbar.navbar-expand-lg.sticky-top
         .form-check.form-check-inline.mb-0.docs-security-note
           input#docs-remember-key.form-check-input(type="checkbox")
           label.form-check-label(for="docs-remember-key") Remember
-        if docs_access === 'protected'
-          form.d-inline(method="post" action="/docs/logout")
-            button.btn.btn-sm.btn-link.docs-signout(type="submit") Sign out
-        else
+        if docs_access === 'protected' && docs_authenticated
+          .dropdown
+            button#docs-account-menu.btn.btn-sm.btn-outline-secondary.docs-btn-ghost.dropdown-toggle(
+              type="button"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            )
+              i.bi.bi-person-circle.me-1
+              span.docs-account-label= docs_session_email || 'Account'
+            ul.dropdown-menu.dropdown-menu-end.docs-account-menu(aria-labelledby="docs-account-menu")
+              if docs_session_email
+                li
+                  h6.dropdown-header= docs_session_email
+              li
+                a.dropdown-item(href="/docs/account/settings")
+                  i.bi.bi-gear.me-2
+                  | Settings
+              li
+                a.dropdown-item(href="/docs/account/keys")
+                  i.bi.bi-key.me-2
+                  | API Keys
+              li
+                hr.dropdown-divider
+              li
+                form(method="post" action="/docs/logout")
+                  button.dropdown-item.docs-signout(type="submit")
+                    i.bi.bi-box-arrow-right.me-2
+                    | Sign Out
+        else if docs_access !== 'protected'
           span.docs-security-note.text-muted.d-none.d-md-inline Dev only

@@ -170,6 +170,53 @@ describe("docs_auth", () => {
 			});
 		});
 
+		it("serves account settings and changes password via console key", (done) => {
+			const agent = chai.request.agent(server);
+			const security = require("../dist/libs/security");
+			const path = require("path");
+			const User = require(path.join(__dirname, "../dist/models/user_model.js")).default
+				|| require(path.join(__dirname, "../dist/models/user_model.js"));
+			agent
+				.post("/docs/session")
+				.send({ email: init.email, password: init.password })
+				.end((err, loginRes) => {
+					if (err) return done(err);
+					loginRes.should.have.status(200);
+					const consoleKey = loginRes.body.console_key;
+					agent
+						.get("/docs/account/settings")
+						.end((err2, page) => {
+							if (err2) return done(err2);
+							page.should.have.status(200);
+							page.text.should.include("Account settings");
+							page.text.should.include("Authenticator app");
+							page.text.should.include("Passkeys");
+							chai
+								.request(server)
+								.post("/login/password")
+								.set("X-API-Key", consoleKey)
+								.send({
+									current_password: init.password,
+									new_password: "test-password-2",
+								})
+								.end(async (err3, changed) => {
+									try {
+										if (err3) return done(err3);
+										changed.should.have.status(200);
+										// Restore short test password directly (endpoint requires 8+ chars).
+										await User.updateOne(
+											{ email: init.email },
+											{ $set: { password: security.encPassword(init.password) } },
+										);
+										done();
+									} catch (e) {
+										done(e);
+									}
+								});
+						});
+				});
+		});
+
 		it("rejects /docs/session without a cookie", (done) => {
 			chai.request(server)
 				.get("/docs/session")
@@ -186,6 +233,24 @@ describe("docs_auth", () => {
 				.end((err, res) => {
 					res.should.have.status(401);
 					done();
+				});
+		});
+
+		it("issues docs passkey login options without a session", (done) => {
+			chai.request(server)
+				.post("/docs/session/webauthn/options")
+				.send({ email: init.email })
+				.end((err, res) => {
+					try {
+						if (err) return done(err);
+						res.should.have.status(200);
+						res.body.should.have.property("options");
+						res.body.options.should.have.property("challenge");
+						res.body.should.have.property("challenge_token");
+						done();
+					} catch (e) {
+						done(e);
+					}
 				});
 		});
 

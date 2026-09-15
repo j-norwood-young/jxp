@@ -256,6 +256,18 @@ class Docs {
         }
     }
 
+    accountSettings(req, res, next) {
+        try {
+            this.renderTemplate(res, "account-settings", {
+                active_section: "account",
+                title: `Account settings · ${this.package.name}`,
+            }, req);
+        } catch (err) {
+            console.error(err);
+            return next(new errors.InternalServerError(err.toString()));
+        }
+    }
+
     frontPage(req, res, next) {
         try {
             this.renderTemplate(res, "index", {

@@ -53,10 +53,30 @@ morgan.token("safe-referrer", (req) =>
 	sanitizeRequestUrl(req.headers?.referer || req.headers?.referrer || "-")
 );
 
-const USER_PRIVILEGE_FIELDS = ["admin", "password", "groups"];
+const USER_PRIVILEGE_FIELDS = [
+	"admin",
+	"password",
+	"groups",
+	"totp_enabled",
+	"totp_secret_enc",
+	"totp_pending_secret_enc",
+	"totp_backup_hashes",
+];
 
 function getStripFields(req) {
-	return req.config?.security?.strip_fields || ["password"];
+	return (
+		req.config?.security?.strip_fields || [
+			"password",
+			"temp_hash",
+			"key_hash",
+			"access_token",
+			"refresh_token",
+			"apikey",
+			"totp_secret_enc",
+			"totp_pending_secret_enc",
+			"totp_backup_hashes",
+		]
+	);
 }
 
 function getSecurityOpts(req) {
@@ -853,7 +873,24 @@ const JXP = function (options: JXPConfig) {
 			max_response_size: "10mb",
 		},
 		security: {
-			strip_fields: ["password", "temp_hash", "key_hash", "access_token", "refresh_token", "apikey"],
+			strip_fields: [
+				"password",
+				"temp_hash",
+				"key_hash",
+				"access_token",
+				"refresh_token",
+				"apikey",
+				"totp_secret_enc",
+				"totp_pending_secret_enc",
+				"totp_backup_hashes",
+			],
+		},
+		mfa: {
+			totp_issuer: "JXP",
+			challenge_ttl: "5m",
+		},
+		webauthn: {
+			rp_name: "JXP",
 		},
 		cors: {
 			origins: ["*"],
@@ -1131,6 +1168,21 @@ const JXP = function (options: JXPConfig) {
 	server.post("/refresh", ...(loginThrottle ? [loginThrottle] : []), security.refresh);
 	server.post("/login/refresh", ...(loginThrottle ? [loginThrottle] : []), security.refresh);
 
+	const mfaThrottle = loginThrottle ? [loginThrottle] : [];
+	server.post("/login/mfa", ...mfaThrottle, login.completeMfa);
+	server.post("/login/password", security.login, login.changePassword);
+	server.post("/login/totp/setup", security.login, login.totpSetup);
+	server.post("/login/totp/confirm", security.login, login.totpConfirm);
+	server.post("/login/totp/disable", security.login, login.totpDisable);
+	server.get("/login/totp/status", security.login, login.totpStatus);
+	server.post("/login/webauthn/register/options", security.login, login.webauthnRegisterOptions);
+	server.post("/login/webauthn/register/verify", security.login, login.webauthnRegisterVerify);
+	server.get("/login/webauthn/credentials", security.login, login.webauthnList);
+	server.del("/login/webauthn/credentials/:id", security.login, login.webauthnDelete);
+	server.post("/login/webauthn/credentials/:id/delete", security.login, login.webauthnDelete);
+	server.post("/login/webauthn/options", ...mfaThrottle, login.webauthnLoginOptions);
+	server.post("/login/webauthn/verify", ...mfaThrottle, login.webauthnLoginVerify);
+
 	/* Groups */
 	server.put(
 		"/groups/:user_id",
@@ -1161,6 +1213,21 @@ const JXP = function (options: JXPConfig) {
 		...(loginThrottle ? [loginThrottle] : []),
 		docsAuth.establishSession,
 	);
+	server.post(
+		"/docs/session/mfa",
+		...(loginThrottle ? [loginThrottle] : []),
+		docsAuth.establishSessionMfa,
+	);
+	server.post(
+		"/docs/session/webauthn/options",
+		...(loginThrottle ? [loginThrottle] : []),
+		docsAuth.establishSessionPasskeyOptions,
+	);
+	server.post(
+		"/docs/session/webauthn/verify",
+		...(loginThrottle ? [loginThrottle] : []),
+		docsAuth.establishSessionPasskeyVerify,
+	);
 	server.get("/docs/session", docsAuth.getSession);
 	server.post("/docs/logout", docsAuth.logout);
 	server.get("/docs/assets/:file", docs.serveAsset.bind(docs));
@@ -1170,7 +1237,8 @@ const JXP = function (options: JXPConfig) {
 	server.get("/docs/diagnostics", docsAuth.docsAccessMiddleware, docs.diagnostics.bind(docs));
 	server.get("/docs/md/:md_doc", docs.md.bind(docs));
 	server.get("/docs/model/:modelname", docsAuth.docsAccessMiddleware, docs.model.bind(docs));
-	server.get("/docs/account", docsAuth.docsAccessMiddleware, (req, res, next) => res.redirect(302, "/docs/account/keys", next));
+	server.get("/docs/account", docsAuth.docsAccessMiddleware, (req, res, next) => res.redirect(302, "/docs/account/settings", next));
+	server.get("/docs/account/settings", docsAuth.docsAccessMiddleware, docs.accountSettings.bind(docs));
 	server.get("/docs/account/keys", docsAuth.docsAccessMiddleware, docs.accountKeys.bind(docs));
 	server.get("/docs/account/keys/data", docsAuth.docsAccessMiddleware, docsAuth.listAccountKeys);
 	server.post("/docs/account/keys", docsAuth.docsAccessMiddleware, docsAuth.createAccountKey);

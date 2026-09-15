@@ -209,3 +209,161 @@ X-API-Key: <apikey>
 ```
 
 API keys in query parameters are rejected. This prevents credentials from leaking through access logs, browser history, Referer headers, caches, and monitoring systems. Upgrade `jxp-helper` to v3 for automatic header-based requests.
+
+## Multi-factor authentication (TOTP)
+
+Clients build their own enrollment and login UI. JXP exposes REST endpoints only.
+
+Interactive password login (`POST /login` and docs `POST /docs/session`) requires a second factor when the user has TOTP enabled. Passkeys are passwordless only (see below) and are not offered as MFA after password. **API keys and Basic Auth do not go through the MFA challenge** (machine credentials).
+
+The docs browser includes Account → Settings for password change, TOTP, and passkeys (uses the ephemeral console API key), plus a **Login with Passkey** button on the sign-in page.
+
+### Change password
+
+```http
+POST /login/password
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "current_password": "…", "new_password": "…" }
+```
+
+`new_password` must be at least 8 characters. X-API-Key auth also works.
+
+### Enroll TOTP
+
+All enrollment routes require a Bearer token.
+
+1. `POST /login/totp/setup` — returns `{ secret, otpauth_url, qr_data_url, backup_codes }` once. Show `qr_data_url` as an `<img src>` (or generate a QR from `otpauth_url`). Store backup codes securely; they are not shown again.
+2. `POST /login/totp/confirm` with `{ "code": "123456" }` — enables TOTP after the authenticator app confirms. Confirmation accepts only a live 6-digit code.
+3. `GET /login/totp/status` — `{ "enabled": true|false }`
+4. `POST /login/totp/disable` with `{ "code": "..." }` — TOTP or unused backup code.
+
+YubiKey OATH-TOTP works through [Yubico Authenticator](https://www.yubico.com/products/yubico-authenticator/) by scanning the same QR / `otpauth_url`. For YubiKey as a FIDO2 hardware key, use the passkey endpoints instead.
+
+### Login with TOTP
+
+```http
+POST /login
+Content-Type: application/json
+
+{ "email": "user@example.com", "password": "…" }
+```
+
+If MFA is required:
+
+```json
+{
+  "status": "mfa_required",
+  "challenge": "<jwt>",
+  "methods": ["totp"]
+}
+```
+
+Complete with:
+
+```http
+POST /login/mfa
+Content-Type: application/json
+
+{ "method": "totp", "challenge": "<jwt>", "code": "123456" }
+```
+
+Success returns the same token pair as a normal login.
+
+### Browser example (TOTP login)
+
+```javascript
+async function loginWithTotp(email, password, getCodeFromUser) {
+  const step1 = await fetch("/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  }).then((r) => r.json());
+
+  if (step1.status !== "mfa_required") return step1;
+
+  const code = await getCodeFromUser(); // prompt for authenticator / backup code
+  return fetch("/login/mfa", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      method: "totp",
+      challenge: step1.challenge,
+      code,
+    }),
+  }).then((r) => r.json());
+}
+```
+
+## Passkeys (WebAuthn)
+
+Configure `webauthn.rp_id` and `webauthn.origins` to match your front-end origin (see [Configuration](configuration.md#mfa-and-passkeys)).
+
+### Register a passkey (authenticated)
+
+```javascript
+async function registerPasskey(accessToken, name = "Passkey") {
+  const { options, challenge_token } = await fetch("/login/webauthn/register/options", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }).then((r) => r.json());
+
+  const credential = await navigator.credentials.create({
+    publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options),
+  });
+
+  return fetch("/login/webauthn/register/verify", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      challenge_token,
+      name,
+      response: credential.toJSON(),
+    }),
+  }).then((r) => r.json());
+}
+```
+
+If `parseCreationOptionsFromJSON` / `toJSON` are unavailable, convert ArrayBuffers to base64url yourself (or use `@simplewebauthn/browser`).
+
+List / delete:
+
+- `GET /login/webauthn/credentials`
+- `DELETE /login/webauthn/credentials/:id` — body `{ "password": "…" }` required when deleting the last passkey and TOTP is off
+
+### Passwordless login
+
+Passkeys are **passwordless only** — they are not a second factor after password. Use a dedicated “Login with Passkey” control (or call the endpoints below). After password, MFA is TOTP (authenticator / backup codes) only.
+
+```javascript
+async function loginWithPasskey(email) {
+  const { options, challenge_token } = await fetch("/login/webauthn/options", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }), // optional; helps discoverability
+  }).then((r) => r.json());
+
+  const assertion = await navigator.credentials.get({
+    publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(options),
+  });
+
+  return fetch("/login/webauthn/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      challenge_token,
+      response: assertion.toJSON(),
+    }),
+  }).then((r) => r.json());
+}
+```
+
+Docs UI session equivalents: `POST /docs/session/webauthn/options` and `POST /docs/session/webauthn/verify` (same body shape; establishes the cookie session + console key).
+
+### Apps that override `user_model`
+
+If your app ships its own `user_model.js`, include the TOTP fields (`totp_enabled`, `totp_secret_enc`, `totp_pending_secret_enc`, `totp_backup_hashes`) when adopting MFA, or keep the built-in User model.

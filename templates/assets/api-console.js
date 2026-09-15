@@ -178,8 +178,15 @@
 		if (reauthBound) return;
 		const form = document.getElementById("docs-reauth-form");
 		const errEl = document.getElementById("docs-reauth-error");
+		const passkeyBtn = document.getElementById("docs-reauth-passkey");
 		if (!form || !errEl) return;
 		reauthBound = true;
+
+		function showErr(message) {
+			errEl.textContent = message;
+			errEl.hidden = false;
+		}
+
 		form.addEventListener("submit", async function (e) {
 			e.preventDefault();
 			errEl.hidden = true;
@@ -199,15 +206,15 @@
 					return {};
 				});
 				if (sessRes.status === 429) {
-					errEl.textContent =
-						"Too many login attempts. Please wait a minute and try again.";
-					errEl.hidden = false;
+					showErr("Too many login attempts. Please wait a minute and try again.");
+					return;
+				}
+				if (sessionBody.status === "mfa_required") {
+					showErr("This account requires an authenticator code. Sign in from the login page.");
 					return;
 				}
 				if (!sessRes.ok || !sessionBody.ok) {
-					errEl.textContent =
-						sessionBody.message || "Incorrect email or password";
-					errEl.hidden = false;
+					showErr(sessionBody.message || "Incorrect email or password");
 					return;
 				}
 				storeConsoleKey(sessionBody.console_key, sessionBody.console_key_id);
@@ -216,10 +223,40 @@
 				sessionLoadPromise = Promise.resolve();
 				hideReauthModal();
 			} catch {
-				errEl.textContent = "Login request failed";
-				errEl.hidden = false;
+				showErr("Login request failed");
 			}
 		});
+
+		if (passkeyBtn) {
+			passkeyBtn.addEventListener("click", async function () {
+				errEl.hidden = true;
+				if (!window.JxpDocsPasskey || typeof window.JxpDocsPasskey.login !== "function") {
+					showErr("Passkey login is unavailable");
+					return;
+				}
+				passkeyBtn.disabled = true;
+				const original = passkeyBtn.innerHTML;
+				passkeyBtn.textContent = "Waiting for passkey…";
+				try {
+					const email = form.email && form.email.value ? form.email.value.trim() : "";
+					if (!email) {
+						showErr("Enter your email above, then click Login with Passkey");
+						return;
+					}
+					const sessionBody = await window.JxpDocsPasskey.login(email);
+					storeConsoleKey(sessionBody.console_key, sessionBody.console_key_id);
+					setApiKeyInput(sessionBody.console_key || "");
+					form.password.value = "";
+					sessionLoadPromise = Promise.resolve();
+					hideReauthModal();
+				} catch (err) {
+					showErr(err.message || "Passkey authentication failed");
+				} finally {
+					passkeyBtn.disabled = false;
+					passkeyBtn.innerHTML = original;
+				}
+			});
+		}
 	}
 
 	/**
@@ -231,6 +268,8 @@
 		sessionLoadPromise = (async function () {
 			const access = document.documentElement.dataset.docsAccess;
 			if (access !== "protected") return;
+			// Login page has no session yet — probing /docs/session only adds a noisy 401.
+			if (document.getElementById("docs-login-form")) return;
 			bindReauthForm();
 
 			const sessionKey = sessionStorage.getItem(CONSOLE_KEY);
