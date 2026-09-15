@@ -97,7 +97,7 @@ block content
                 if field.arrayType
                   span.badge.text-bg-info Array of #{field.arrayType}
                 else
-                  span.badge.text-bg-light.text-dark= field.instance
+                  span.badge.text-bg-light= field.instance
               td= field.options.link || ''
               td= field.options.map_to || ''
               td.small= field.defaultValue != null ? field.defaultValue : ''
@@ -111,7 +111,7 @@ block content
     if field
       .field-details.mb-3
         h3.h6= field.path
-        pre.pre.small.bg-light.p-2.rounded= JSON.stringify(field, null, 2)
+        pre.field-json.small.p-2.rounded= JSON.stringify(field, null, 2)
         if field.schema
           h4.h6 Nested schema
           ul.small
